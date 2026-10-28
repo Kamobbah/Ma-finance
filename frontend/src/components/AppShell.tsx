@@ -77,9 +77,9 @@ function SavedHint() {
   return (
     <div data-testid="local-storage-hint" className="rounded-2xl bg-slate-50 p-3 text-[11px] leading-relaxed text-slate-500">
       <p className="flex items-center gap-1.5 font-semibold text-slate-700">
-        <ShieldCheck className="size-3.5 text-emerald-600" /> Données sur cet appareil
+        <ShieldCheck className="size-3.5 text-emerald-600" /> Données dans MongoDB
       </p>
-      <p className="mt-1">Aucun serveur, aucun compte. {saved ? `Sauvegardé à ${new Date(saved).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}.` : "Sauvegarde automatique."}</p>
+      <p className="mt-1">Enregistrées par le serveur local. {saved ? `Sauvegardé à ${new Date(saved).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}.` : "Sauvegarde automatique."}</p>
     </div>
   );
 }

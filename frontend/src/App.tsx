@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
@@ -21,10 +21,11 @@ let booted = false;
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
 export default function App() {
   const ready = useReady();
+  const [bootError, setBootError] = useState(false);
   useEffect(() => {
     if (booted) return;
     booted = true;
-    initStore().then(() => {
+    initStore().catch(() => setBootError(true)).then(() => {
       if (bootSeedMigrated())
         setTimeout(() => toast.success("Historique mis à jour", { description: "Le relevé complet depuis l'ouverture du compte a été chargé. Vos saisies, règles, budgets et objectifs sont conservés.", duration: 8000 }), 300);
       const n = bootCreatedCount();
@@ -37,7 +38,7 @@ export default function App() {
       <div data-testid="app-loading" className="grid min-h-screen place-items-center bg-background text-sm text-slate-500">
         <div className="flex items-center gap-3">
           <div className="grid size-9 animate-pulse place-items-center rounded-2xl bg-slate-900 font-extrabold text-white">€</div>
-          Chargement de vos données locales…
+          {bootError ? "Impossible de joindre le serveur (backend ou MongoDB arrêté). Relancez-le puis rechargez la page." : "Chargement de vos données…"}
         </div>
       </div>
     );

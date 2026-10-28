@@ -117,7 +117,7 @@ export default function DataPage() {
 
   return (
     <div>
-      <PageHeader eyebrow="Vos données, sur votre appareil" title="Données" subtitle="Importez, exportez, sauvegardez et gérez vos comptes. Tout est stocké localement dans ce navigateur (IndexedDB) : rien n'est envoyé à un serveur." />
+      <PageHeader eyebrow="Vos données, dans votre base MongoDB" title="Données" subtitle="Importez, exportez, sauvegardez et gérez vos comptes. Tout est enregistré dans MongoDB via le serveur de l'application." />
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Panel testid="import-panel">
@@ -276,7 +276,7 @@ export default function DataPage() {
               <Database className="size-5 text-rose-600" />
               <span>
                 <span className="block font-semibold text-rose-700">Tout effacer</span>
-                <span className="block text-xs font-normal text-slate-500 whitespace-normal">Supprime comptes, opérations, objectifs et récurrences de cet appareil.</span>
+                <span className="block text-xs font-normal text-slate-500 whitespace-normal">Supprime comptes, opérations, objectifs et récurrences de la base.</span>
               </span>
             </Button>
           </div>

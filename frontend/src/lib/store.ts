@@ -6,39 +6,8 @@ import { applyRules, DEFAULT_CATEGORIES, defaultRules } from "./rules";
 import { parseRevolutStatement } from "./revolut";
 import { processDue } from "./recurrence";
 import { fromIso, round2, todayIso, toIso, uid } from "./format";
-
-/* ---------------- IndexedDB (clé/valeur minimaliste) ---------------- */
-const DB_NAME = "ma-finance";
-const STORE = "kv";
-const KEY = "data";
-
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function idbGet<T>(): Promise<T | undefined> {
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const req = db.transaction(STORE, "readonly").objectStore(STORE).get(KEY);
-    req.onsuccess = () => resolve(req.result as T | undefined);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function idbSet(value: unknown): Promise<void> {
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).put(value, KEY);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-}
+import { ApiError, apiGet, apiPut } from "./api";
+import { toast } from "sonner";
 
 /* ---------------- Store ---------------- */
 const EMPTY: AppData = { version: 1, budgets: [], dismissedSubscriptions: [], accounts: [], transactions: [], categories: DEFAULT_CATEGORIES, rules: [], recurrences: [], goals: [] };
@@ -53,21 +22,16 @@ const subscribe = (l: () => void) => {
 };
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
+// ponytail: tout le document est renvoyé à chaque modification ; dernier enregistrement gagnant si deux onglets écrivent.
 function persist() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    idbSet(state)
+    apiPut("/data", state)
       .then(() => {
         lastSaved = new Date().toISOString();
         emit();
       })
-      .catch(() => {
-        try {
-          localStorage.setItem("ma-finance-data", JSON.stringify(state));
-        } catch {
-          /* quota */
-        }
-      });
+      .catch(() => toast.error("Sauvegarde impossible", { description: "Le serveur ou MongoDB ne répond pas. La modification sera renvoyée à la prochaine action.", duration: 8000 }));
   }, 250);
 }
 
@@ -198,10 +162,10 @@ function runRecurrences(d: AppData): { data: AppData; created: number } {
 export async function initStore() {
   let data: AppData | undefined;
   try {
-    data = await idbGet<AppData>();
-  } catch {
-    const raw = localStorage.getItem("ma-finance-data");
-    data = raw ? (JSON.parse(raw) as AppData) : undefined;
+    data = await apiGet<AppData>("/data");
+  } catch (e) {
+    // Base vide → on sème le relevé. Toute autre erreur doit bloquer : semer écraserait les données en base.
+    if (!(e instanceof ApiError && e.status === 404)) throw e;
   }
   const first = !data;
   let migrated = false;
