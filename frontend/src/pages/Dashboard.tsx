@@ -38,6 +38,7 @@ export default function Dashboard() {
   const horizon = new Date();
   horizon.setDate(horizon.getDate() + 45);
   const upcoming = plannedOccurrences(data.recurrences, new Set(data.accounts.map((a) => a.id)), today, horizon.toISOString().slice(0, 10))
+    .filter((o) => !(o.internal && o.amount > 0))
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(0, 6);
   const accName = (id: string) => data.accounts.find((a) => a.id === id)?.name ?? "—";
@@ -277,6 +278,7 @@ export default function Dashboard() {
                       <p className="truncate text-sm font-semibold text-slate-800">{o.name}</p>
                       <p className="flex items-center gap-1 text-xs text-slate-500">
                         <CalendarClock className="size-3" /> {fmtDate(o.date)}
+                        {o.internal && <span data-testid={`upcoming-transfer-${i}`}> · virement auto vers {accName(data.recurrences.find((r) => r.id === o.recurrenceId)?.toAccountId ?? "")}</span>}
                       </p>
                     </div>
                     <Amount value={o.amount} className="text-sm" />

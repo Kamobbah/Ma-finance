@@ -27,8 +27,9 @@ export function upcomingReminders(data: AppData, today = todayIso()): Reminder[]
   const out: Reminder[] = [];
   const dayMs = 86400000;
   for (const r of data.recurrences) {
-    if (r.type !== "expense") continue;
-    for (const o of forecast(r, today, endIso, 4)) {
+    if (r.type === "income") continue;
+    for (const o of forecast(r, today, endIso, 8)) {
+      if (o.amount >= 0) continue; // virement auto : rappel sur le compte débité uniquement
       const d = Math.round((fromIso(o.date).getTime() - fromIso(today).getTime()) / dayMs);
       out.push({ key: `${r.id}|${o.date}|${stageOf(d)}`, recurrenceId: r.id, name: r.name, date: o.date, amount: o.amount, accountId: r.accountId, daysUntil: d, stage: stageOf(d) });
     }
@@ -62,7 +63,7 @@ export interface LowBalanceAlert {
 
 export const LOW_BALANCE_DAYS = 7;
 
-/** Pockets dont le solde actuel ne couvre pas les prélèvements récurrents des 7 prochains jours. */
+/** Pockets dont le solde actuel ne couvre pas les prélèvements / virements automatiques sortants des 7 prochains jours (virements entrants pris en compte). */
 export function lowBalanceAlerts(data: AppData, today = todayIso(), days = LOW_BALANCE_DAYS): LowBalanceAlert[] {
   const end = new Date(fromIso(today));
   end.setDate(end.getDate() + days);
@@ -70,16 +71,17 @@ export function lowBalanceAlerts(data: AppData, today = todayIso(), days = LOW_B
   const out: LowBalanceAlert[] = [];
   for (const acc of data.accounts) {
     if (acc.type !== "pocket" || acc.archived) continue;
-    const items = data.recurrences
-      .filter((r) => r.type === "expense" && r.accountId === acc.id)
-      .flatMap((r) => forecast(r, today, endIso, 10).map((o) => ({ name: r.name, date: o.date, amount: -o.amount })))
-      .sort((a, b) => a.date.localeCompare(b.date));
+    const moves = data.recurrences
+      .flatMap((r) => forecast(r, today, endIso, 20).filter((o) => o.accountId === acc.id).map((o) => ({ name: r.name, date: o.date, amount: -o.amount })))
+      // le même jour, les crédits passent avant les débits
+      .sort((a, b) => a.date.localeCompare(b.date) || a.amount - b.amount);
+    const items = moves.filter((m) => m.amount > 0);
     if (!items.length) continue;
     const balance = accountBalance(acc, data.transactions, today);
     let run = balance;
     let worst = 0;
     let firstShortDate = "";
-    for (const it of items) {
+    for (const it of moves) {
       run = round2(run - it.amount);
       if (run < 0 && !firstShortDate) firstShortDate = it.date;
       worst = Math.min(worst, run);

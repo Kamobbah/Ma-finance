@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { CalendarClock, MoreHorizontal, Pause, Pencil, Play, Plus, Repeat, Square, Trash2 } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, CalendarClock, MoreHorizontal, Pause, Pencil, Play, Plus, Repeat, Square, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Amount, Chip, ConfirmDialog, EmptyState, Field, NativeSelect, PageHeader, Panel, StatCard, inputCls } from "@/components/kit";
 import { deleteRecurrence, saveRecurrence, useData } from "@/lib/store";
 import { accountOptions, categoryOptions } from "@/lib/ui";
+import { INTERNAL_CATEGORY } from "@/lib/rules";
 import { forecast, frequencyLabel } from "@/lib/recurrence";
 import { fmtDate, money, round2, todayIso, uid } from "@/lib/format";
 import { parseAmount } from "@/lib/csv";
@@ -67,16 +68,24 @@ function RecurrenceDialog({ open, rec, onClose }: { open: boolean; rec: Recurren
   }, [open, rec]);
   if (!f) return null;
   const set = (patch: Partial<Recurrence>) => setF({ ...f, ...patch });
+  const destOptions = (from: string) => {
+    const cur = data.accounts.find((a) => a.id === from)?.currency;
+    return accountOptions(data.accounts.filter((a) => a.id !== from && a.currency === cur && !a.archived));
+  };
 
   const submit = () => {
     const a = parseAmount(amount);
     if (!f.name.trim()) return toast.error("Donnez un nom à la récurrence");
     if (!a || a <= 0) return toast.error("Indiquez un montant positif");
+    if (f.type === "transfer") {
+      if (!f.toAccountId) return toast.error("Choisissez le compte ou la Pocket de destination");
+      if (f.toAccountId === f.accountId) return toast.error("Les comptes de départ et d'arrivée doivent être différents");
+    }
     if (f.endMode === "date" && !f.endDate) return toast.error("Choisissez la date de fin");
     if (f.endMode === "count" && !f.maxCount) return toast.error("Indiquez le nombre d'occurrences");
     const t = parseAmount(target);
     if (f.endMode === "amount" && !t) return toast.error("Indiquez le montant cumulé cible");
-    const next: Recurrence = { ...f, name: f.name.trim(), amount: round2(a), targetAmount: f.endMode === "amount" ? (t ?? undefined) : undefined, nextDate: f.nextDate < f.startDate ? f.startDate : f.nextDate };
+    const next: Recurrence = { ...f, name: f.name.trim(), category: f.type === "transfer" ? INTERNAL_CATEGORY : f.category, toAccountId: f.type === "transfer" ? f.toAccountId : undefined, amount: round2(a), targetAmount: f.endMode === "amount" ? (t ?? undefined) : undefined, nextDate: f.nextDate < f.startDate ? f.startDate : f.nextDate };
     if (next.status === "ended" && rec?.status === "ended" && next.endMode !== rec.endMode) next.status = "active";
     const created = saveRecurrence(next);
     toast.success(rec ? "Récurrence modifiée" : "Récurrence créée", { description: created ? `${created} opération(s) échue(s) créée(s) automatiquement` : undefined });
@@ -95,17 +104,41 @@ function RecurrenceDialog({ open, rec, onClose }: { open: boolean; rec: Recurren
             <Input data-testid="rec-name-input" value={f.name} onChange={(e) => set({ name: e.target.value })} placeholder="ex. Loyer, Netflix, Salaire…" className={inputCls} />
           </Field>
           <Field label="Type">
-            <NativeSelect testid="rec-type-select" value={f.type} onChange={(v) => set({ type: v as "income" | "expense" })} options={[{ value: "expense", label: "Dépense" }, { value: "income", label: "Revenu" }]} />
+            <NativeSelect
+              testid="rec-type-select"
+              value={f.type}
+              onChange={(v) => {
+                const type = v as Recurrence["type"];
+                if (type === "transfer") set({ type, toAccountId: f.toAccountId ?? destOptions(f.accountId)[0]?.value });
+                else set({ type, category: f.category === INTERNAL_CATEGORY ? "Autres" : f.category });
+              }}
+              options={[
+                { value: "expense", label: "Dépense" },
+                { value: "income", label: "Revenu" },
+                { value: "transfer", label: "Virement vers un compte / Pocket" },
+              ]}
+            />
           </Field>
           <Field label="Montant (€)">
             <Input data-testid="rec-amount-input" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="9,99" className={inputCls} />
           </Field>
-          <Field label="Compte ou Pocket">
-            <NativeSelect testid="rec-account-select" value={f.accountId} onChange={(v) => set({ accountId: v })} options={accountOptions(data.accounts)} />
+          <Field label={f.type === "transfer" ? "Depuis" : "Compte ou Pocket"}>
+            <NativeSelect
+              testid="rec-account-select"
+              value={f.accountId}
+              onChange={(v) => set({ accountId: v, toAccountId: f.type === "transfer" && (f.toAccountId === v || !destOptions(v).some((o) => o.value === f.toAccountId)) ? destOptions(v)[0]?.value : f.toAccountId })}
+              options={accountOptions(data.accounts)}
+            />
           </Field>
-          <Field label="Catégorie">
-            <NativeSelect testid="rec-category-select" value={f.category} onChange={(v) => set({ category: v })} options={categoryOptions(data)} />
-          </Field>
+          {f.type === "transfer" ? (
+            <Field label="Vers" hint="Virement interne : exclu des revenus et dépenses">
+              <NativeSelect testid="rec-to-account-select" value={f.toAccountId ?? ""} onChange={(v) => set({ toAccountId: v })} options={destOptions(f.accountId)} />
+            </Field>
+          ) : (
+            <Field label="Catégorie">
+              <NativeSelect testid="rec-category-select" value={f.category} onChange={(v) => set({ category: v })} options={categoryOptions(data)} />
+            </Field>
+          )}
           <Field label="Fréquence">
             <NativeSelect
               testid="rec-frequency-select"
@@ -206,7 +239,8 @@ export default function Recurrences() {
 
   const today = todayIso();
   const end = `${today.slice(0, 4)}-12-31`;
-  const plannedYear = data.recurrences.flatMap((r) => forecast(r, today, end));
+  const plannedYear = data.recurrences.flatMap((r) => forecast(r, today, end)).filter((o) => !o.internal);
+  const plannedTransfers = data.recurrences.flatMap((r) => forecast(r, today, end)).filter((o) => o.internal && o.amount < 0);
   const plannedOut = round2(plannedYear.filter((o) => o.amount < 0).reduce((s, o) => s - o.amount, 0));
   const plannedIn = round2(plannedYear.filter((o) => o.amount > 0).reduce((s, o) => s + o.amount, 0));
   const monthlyCost = round2(
@@ -235,10 +269,11 @@ export default function Recurrences() {
           </Button>
         }
       />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard testid="rec-monthly-cost-card" tone="expense" label="Coût mensuel estimé" value={money(monthlyCost)} sub="Dépenses récurrentes actives" />
         <StatCard testid="rec-planned-out-card" tone="plain" label={`Dépenses prévues d'ici fin ${today.slice(0, 4)}`} value={money(plannedOut)} sub={`${plannedYear.filter((o) => o.amount < 0).length} échéances`} />
         <StatCard testid="rec-planned-in-card" tone="income" label={`Revenus prévus d'ici fin ${today.slice(0, 4)}`} value={money(plannedIn)} sub={`${plannedYear.filter((o) => o.amount > 0).length} échéances`} />
+        <StatCard testid="rec-planned-transfers-card" tone="plain" label={`Virements auto d'ici fin ${today.slice(0, 4)}`} value={money(round2(plannedTransfers.reduce((t, o) => t - o.amount, 0)))} icon={<ArrowLeftRight className="size-4 text-slate-500" />} sub={`${plannedTransfers.length} virement${plannedTransfers.length > 1 ? "s" : ""} entre vos comptes`} />
       </div>
 
       <SubscriptionFinder />
@@ -268,9 +303,17 @@ export default function Recurrences() {
                   <tr key={r.id} data-testid="recurrence-row" className="border-b border-slate-50 transition-colors hover:bg-slate-50/70">
                     <td className="px-5 py-3">
                       <p className="font-semibold text-slate-800">{r.name}</p>
-                      <p className="text-xs text-slate-500">{r.category}{r.note ? ` · ${r.note}` : ""}</p>
+                      <p className="text-xs text-slate-500">{r.type === "transfer" ? "Virement automatique" : r.category}{r.note ? ` · ${r.note}` : ""}</p>
                     </td>
-                    <td className="px-3 py-3 text-slate-600">{accName(r.accountId)}</td>
+                    <td className="px-3 py-3 text-slate-600">
+                      {r.type === "transfer" ? (
+                        <span data-testid="recurrence-transfer-route" className="flex items-center gap-1">
+                          {accName(r.accountId)} <ArrowRight className="size-3.5 text-slate-400" /> <b className="font-semibold text-slate-800">{accName(r.toAccountId ?? "")}</b>
+                        </span>
+                      ) : (
+                        accName(r.accountId)
+                      )}
+                    </td>
                     <td className="px-3 py-3 text-slate-600">{frequencyLabel(r)}</td>
                     <td className="px-3 py-3">
                       {r.status === "ended" ? (
@@ -283,7 +326,11 @@ export default function Recurrences() {
                     </td>
                     <td className="px-3 py-3 text-xs text-slate-500">{endLabel(r)}</td>
                     <td className="px-3 py-3 text-right">
-                      <Amount value={r.type === "income" ? r.amount : -r.amount} />
+                      {r.type === "transfer" ? (
+                        <span className="font-semibold tabular text-slate-700">{money(r.amount)}</span>
+                      ) : (
+                        <Amount value={r.type === "income" ? r.amount : -r.amount} />
+                      )}
                     </td>
                     <td className="px-3 py-3">
                       <Chip testid="recurrence-status" className={STATUS[r.status].cls}>

@@ -77,7 +77,8 @@ export interface Recurrence {
   amount: number; // positif
   accountId: string;
   category: string;
-  type: "income" | "expense";
+  type: "income" | "expense" | "transfer"; // transfer : virement automatique accountId → toAccountId
+  toAccountId?: string;
   frequency: Frequency;
   interval: number; // pour custom
   intervalUnit: "days" | "weeks" | "months";

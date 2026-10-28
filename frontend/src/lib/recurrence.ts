@@ -1,5 +1,6 @@
 import type { Recurrence, Transaction } from "./types";
 import { fromIso, round2, todayIso, toIso, uid } from "./format";
+import { INTERNAL_CATEGORY as TRANSFER_CATEGORY } from "./rules";
 
 function addMonthsAnchored(iso: string, months: number, anchorDay: number): string {
   const d = fromIso(iso);
@@ -75,7 +76,8 @@ export interface Occurrence {
   amount: number; // signé
   accountId: string;
   category: string;
-  type: "income" | "expense";
+  type: Recurrence["type"];
+  internal: boolean; // jambe d'un virement automatique entre comptes
 }
 
 /** Échéances prévues (non encore réalisées) entre from et to inclus. */
@@ -88,7 +90,10 @@ export function forecast(rec: Recurrence, from: string, to: string, limit = 500)
     const amt = nextAmount(rec, s);
     if (amt === null) break;
     if (s.date >= from) {
-      out.push({ recurrenceId: rec.id, name: rec.name, date: s.date, amount: rec.type === "income" ? amt : -amt, accountId: rec.accountId, category: rec.category, type: rec.type });
+      if (rec.type === "transfer") {
+        out.push({ recurrenceId: rec.id, name: rec.name, date: s.date, amount: -amt, accountId: rec.accountId, category: TRANSFER_CATEGORY, type: rec.type, internal: true });
+        if (rec.toAccountId) out.push({ recurrenceId: rec.id, name: rec.name, date: s.date, amount: amt, accountId: rec.toAccountId, category: TRANSFER_CATEGORY, type: rec.type, internal: true });
+      } else out.push({ recurrenceId: rec.id, name: rec.name, date: s.date, amount: rec.type === "income" ? amt : -amt, accountId: rec.accountId, category: rec.category, type: rec.type, internal: false });
     }
     s.occurrences++;
     s.cumulated = round2(s.cumulated + amt);
@@ -109,7 +114,11 @@ export function processDue(rec: Recurrence, currency: string, today = todayIso()
       next.status = "ended";
       break;
     }
-    created.push({
+    if (next.type === "transfer") {
+      const base = { date: next.nextDate, description: next.name, category: TRANSFER_CATEGORY, currency, note: next.note, internal: true, source: "recurring" as const, catStatus: "manual" as const, recurrenceId: next.id, createdAt: new Date().toISOString() };
+      created.push({ ...base, id: uid(), accountId: next.accountId, type: "transfer_out", amount: -amt, counterpartAccountId: next.toAccountId });
+      if (next.toAccountId) created.push({ ...base, id: uid(), accountId: next.toAccountId, type: "transfer_in", amount: amt, counterpartAccountId: next.accountId });
+    } else created.push({
       id: uid(),
       date: next.nextDate,
       accountId: next.accountId,

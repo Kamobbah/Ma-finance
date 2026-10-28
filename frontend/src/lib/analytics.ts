@@ -60,7 +60,7 @@ export interface MonthRow {
 export function plannedOccurrences(recs: Recurrence[], ids: Set<string>, from: string, to: string): Occurrence[] {
   const start = from > todayIso() ? from : nextDay(todayIso());
   if (start > to) return [];
-  return recs.filter((r) => ids.has(r.accountId)).flatMap((r) => forecast(r, start, to));
+  return recs.flatMap((r) => forecast(r, start, to)).filter((o) => ids.has(o.accountId));
 }
 
 function nextDay(iso: string) {
@@ -83,6 +83,7 @@ export function monthly(data: AppData, filter: string, year: number, includeInte
     rows[m].count++;
   }
   for (const o of plannedOccurrences(data.recurrences, scopeIds(data.accounts, filter), f, tt)) {
+    if (o.internal && !includeInternal) continue;
     const m = Number(o.date.slice(5, 7)) - 1;
     if (o.amount > 0) rows[m].plannedInc += o.amount;
     else rows[m].plannedExp += -o.amount;
