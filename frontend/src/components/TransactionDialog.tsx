@@ -14,9 +14,23 @@ import { MAIN_ID } from "@/lib/revolut";
 import { parseAmount } from "@/lib/csv";
 import { money, todayIso, TYPE_LABELS, uid } from "@/lib/format";
 import { INTERNAL_CATEGORY } from "@/lib/rules";
+import { ApiError, apiPost } from "@/lib/api";
+import { Camera } from "lucide-react";
 import type { Transaction, TxType } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 const AUTO = "__auto__";
+
+/** Réduit la photo (≤ 1600 px, JPEG) : limite de taille de l'API et formats type HEIC convertis par le navigateur. */
+async function photoToJpeg(file: File): Promise<string> {
+  const img = await createImageBitmap(file);
+  const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+  const c = document.createElement("canvas");
+  c.width = Math.round(img.width * k);
+  c.height = Math.round(img.height * k);
+  c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", 0.85).split(",")[1];
+}
 
 function autoType(amount: number, internal: boolean): TxType {
   if (internal) return amount >= 0 ? "transfer_in" : "transfer_out";
@@ -41,6 +55,25 @@ export default function TransactionDialog() {
   const [internal, setInternal] = useState(false);
   const [counterpart, setCounterpart] = useState("");
   const [mirror, setMirror] = useState(true);
+  const [reading, setReading] = useState(false);
+
+  const readReceipt = async (file?: File) => {
+    if (!file) return;
+    setReading(true);
+    try {
+      const r = await apiPost<{ amount: number | null; date: string | null; merchant: string | null }>("/receipt", { image: await photoToJpeg(file), media_type: "image/jpeg" });
+      if (r.amount) setAmount(String(-Math.abs(r.amount)).replace(".", ","));
+      if (r.date && /^\d{4}-\d{2}-\d{2}$/.test(r.date)) setDate(r.date);
+      if (r.merchant && !description.trim()) setDescription(r.merchant);
+      if (r.amount && r.date) toast.success("Ticket lu", { description: "Vérifie le montant et la date avant d'enregistrer." });
+      else toast.warning("Ticket partiellement lisible", { description: "Complète les champs manquants." });
+    } catch (e) {
+      const detail = e instanceof ApiError ? (e.body as { detail?: unknown } | null)?.detail : undefined;
+      toast.error("Lecture du ticket impossible", { description: typeof detail === "string" ? detail : "Réessaie avec une photo plus nette." });
+    } finally {
+      setReading(false);
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -138,6 +171,10 @@ export default function TransactionDialog() {
           <DialogTitle className="text-xl font-bold">{editing ? "Modifier l'opération" : "Nouvelle opération"}</DialogTitle>
           <DialogDescription>Montant négatif pour une sortie, positif pour une entrée. Le type est déduit automatiquement.</DialogDescription>
         </DialogHeader>
+        <label data-testid="tx-receipt-button" className={cn("flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-300 p-3 text-sm font-semibold text-slate-700 hover:bg-slate-50", reading && "pointer-events-none opacity-60")}>
+          <Camera className="size-4" /> {reading ? "Lecture du ticket…" : "Photographier un ticket pour remplir le montant et la date"}
+          <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => { readReceipt(e.target.files?.[0]); e.target.value = ""; }} />
+        </label>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Date">
             <Input data-testid="tx-date-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />

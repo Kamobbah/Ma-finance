@@ -1,10 +1,9 @@
 # Ma Finance — SPEC
 
-App web 100 % locale (aucun backend utilisé, aucun compte). UI en français, devise €.
-Le backend FastAPI du template reste en place mais n'est PAS utilisé par l'app (exigence utilisateur : données uniquement sur l'appareil).
+App web, UI en français, devise €. Aucun compte. Données dans MongoDB via le backend FastAPI.
 
 ## Stockage
-- IndexedDB `ma-finance` / store `kv` / clé `data` → objet `AppData` complet (src/lib/store.ts), sauvegarde auto (debounce 250 ms) après chaque modification. Fallback localStorage `ma-finance-data`.
+- MongoDB, collection `app_data`, document `_id: "main"` = objet `AppData` complet. `GET /api/data` (404 si vide → le front sème le relevé), `PUT /api/data` après chaque modification (debounce 250 ms). Erreur réseau au démarrage → écran d'erreur, jamais de semis (il écraserait la base).
 - Préférences (filtre compte, année, interrupteur virements internes) : localStorage `ma-finance-prefs`.
 - Premier lancement : `src/data/releve-revolut.csv` (relevé Revolut COMPLET depuis l'ouverture, nov. 2019 → oct. 2026, SEED_VERSION=2) est parsé (src/lib/revolut.ts) puis catégorisé par les règles par défaut.
 
@@ -64,3 +63,7 @@ Aucune.
 - Rappel de solde bas (`lowBalanceAlerts` dans insights.ts, bandeau rose dans RemindersBar + toast) : Pockets non archivées dont le solde actuel ne couvre pas les dépenses récurrentes actives des 7 prochains jours ; affiche le manque et la date ; masquable (clé dans prefs.dismissedReminders).
 - Budgets par compte : `Budget.accountId?` (compte/Pocket EUR) + `category` ("" = toutes catégories). Périmètres : catégorie tous comptes, compte entier, ou catégorie sur un compte ; doublon de périmètre refusé. Dépensé = dépenses réelles hors internes du périmètre (`budgetSpent`, index "compte|catégorie"). Filtre Tous / Catégories / Comptes sur /budgets, libellé `budgetLabel`. Panneau « Budget du compte » sur /comptes/:id avec lien /budgets?compte=:id (ouvre le formulaire pré-rempli). Alertes de saisie et bilan du mois tiennent compte des budgets de compte.
 - Préparer le mois suivant (/budgets, bouton « Préparer <mois> ») : copie les plafonds de base du mois affiché (défaut ou ajustement) vers le mois suivant pour les budgets cochés (override, ou suppression de l override si égal au défaut), puis affiche ce mois. Le report reste calculé automatiquement en plus.
+
+## Fonctionnalités v5
+- Trésorerie jusqu'à la paie (src/lib/salary.ts, components/TreasuryCard.tsx, tableau de bord). Paie = revenu de catégorie « Salaire » (règle par défaut « Salaire ALDI »). Prochaine paie = dernière paie + max des 3 derniers écarts (31 j si une seule paie) : aucun jour fixe, suit un changement d'employeur. En retard si dépassée sans paie saisie. Disponible = comptes EUR non archivés hors épargne ; échéances = récurrences entre demain et la veille de la paie ; dépenses courantes = dépenses réelles des 3 derniers cycles complets (hors catégories des récurrences actives) / jours × jours restants ; report = disponible + échéances − courantes.
+- Lecture de ticket (POST /api/receipt {image base64, media_type}) : Claude claude-opus-5-5, sortie JSON {amount, date, merchant}. Le front réduit la photo à 1600 px JPEG, remplit montant (négatif), date et description si vide. 503 si ANTHROPIC_API_KEY absente.

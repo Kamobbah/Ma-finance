@@ -102,7 +102,7 @@ export default function Operations() {
       <PageHeader
         eyebrow="Toutes vos transactions"
         title="Opérations"
-        subtitle="Recherchez, filtrez, corrigez et ajoutez vos opérations. Chaque modification est sauvegardée automatiquement sur cet appareil."
+        subtitle="Recherchez, filtrez, corrigez et ajoutez vos opérations. Chaque modification est sauvegardée automatiquement dans la base."
         actions={
           <>
             <Button variant="outline" data-testid="import-csv-button" onClick={() => setImportOpen(true)} className="h-10 rounded-xl">

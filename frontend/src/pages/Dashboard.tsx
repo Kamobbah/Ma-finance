@@ -4,6 +4,7 @@ import { ArrowDownRight, ArrowUpRight, CalendarClock, Landmark, Pause, Pencil, S
 import { Bar, CartesianGrid, Cell, ComposedChart, Legend, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 import GlobalFilters from "@/components/GlobalFilters";
+import TreasuryCard from "@/components/TreasuryCard";
 import { Amount, ChartTooltip, ConfirmDialog, EmptyState, Panel, PanelTitle, StatCard, TypeBadge } from "@/components/kit";
 import { saveRecurrence, useData, usePrefs } from "@/lib/store";
 import { accountBalance, categoryBreakdown, monthly, plannedOccurrences, scopedTx, scopeLabel, sumFlows } from "@/lib/analytics";
@@ -121,6 +122,8 @@ export default function Dashboard() {
           <span className="ml-auto text-sm font-semibold text-slate-900">Voir le bilan →</span>
         </button>
       )}
+
+      <TreasuryCard />
 
       {budgetAlerts.length > 0 && (
         <div data-testid="dashboard-budget-alerts" className="mt-5 flex flex-wrap items-center gap-2 rounded-3xl border border-amber-200/70 bg-amber-50/60 p-3 pl-4 animate-rise">

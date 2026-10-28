@@ -1,6 +1,6 @@
 # Ma Finance
 
-Application de suivi de finances personnelles, en français, **100 % locale** : aucune inscription, aucun serveur, aucune base de données distante. Toutes les données restent dans le navigateur de l'appareil (`localStorage`) et peuvent être exportées / réimportées à tout moment.
+Application de suivi de finances personnelles, en français. Les données sont enregistrées dans **MongoDB** par un petit serveur FastAPI ; aucune inscription. Elles peuvent être exportées / réimportées à tout moment.
 
 Pensée pour un usage Revolut (compte principal, Pockets, compte d'épargne, comptes en devises), elle fonctionne avec n'importe quel relevé CSV.
 
@@ -14,7 +14,12 @@ Pensée pour un usage Revolut (compte principal, Pockets, compte d'épargne, com
 - **Virements internes** (compte ↔ Pockets ↔ épargne) exclus par défaut des revenus et dépenses réels, mais visibles compte par compte.
 - **Page détail par compte** : courbe du solde, transferts entrants / sortants, dépenses par catégorie, budget du compte, objectif de Pocket (tirelire avec jauge).
 
+### Trésorerie et salaire
+- **Trésorerie jusqu'à la paie** (tableau de bord) : disponible aujourd'hui − échéances prévues − dépenses courantes estimées = report estimé la veille de la paie.
+- La paie est toute opération de revenu de catégorie **Salaire** (règle « Salaire ALDI » fournie ; un nouvel employeur = une nouvelle règle). Aucun jour fixe : la prochaine paie est prévue « au plus tard » à partir de l'historique (dernière paie + plus long des 3 derniers écarts).
+
 ### Opérations
+- **Lecture de ticket par IA** : photographier un ticket remplit le montant, la date et l'enseigne (Claude, clé `ANTHROPIC_API_KEY` dans `backend/.env`).
 - Recherche, filtres (compte, catégorie, type, période), ajout / modification / duplication / suppression.
 - **Règles de catégorisation** automatiques et ordonnées, proposées lorsqu'on corrige une catégorie.
 - **Import CSV** (relevés Revolut ou format générique) avec aperçu, et export CSV / JSON.
@@ -48,8 +53,8 @@ Pensée pour un usage Revolut (compte principal, Pockets, compte d'épargne, com
 
 ## Confidentialité
 
-- Aucune donnée ne quitte l'appareil : pas de compte, pas de serveur, pas de traçage.
-- Les données sont stockées dans le `localStorage` du navigateur. Pensez à **exporter une sauvegarde** (page *Données*) avant de changer de navigateur ou de vider le cache.
+- Les données sont dans la base MongoDB locale (collection `app_data`, un document). Seules les photos de tickets sont envoyées à l'API Claude, au moment de la lecture.
+- Les préférences d'affichage (filtres, rappels masqués) restent dans le navigateur.
 
 > ⚠️ Le relevé utilisé pour l'initialisation (`frontend/src/data/`) contient des données bancaires personnelles. Si le dépôt est public, remplacez-le par un fichier d'exemple ou passez le dépôt en privé.
 
@@ -62,29 +67,32 @@ Pensée pour un usage Revolut (compte principal, Pockets, compte d'épargne, com
 - **Recharts** pour les graphiques, **sonner** pour les notifications
 - **React Router** pour la navigation
 
-Le dossier `backend/` (FastAPI) provient du modèle de projet et n'est **pas utilisé** par l'application : tout fonctionne côté navigateur.
+- **FastAPI** + **Motor** (MongoDB) dans `backend/` : `GET/PUT /api/data`, `POST /api/receipt`.
 
 ---
 
 ## Démarrer en local
 
-Prérequis : Node.js 20+ et Yarn.
+Prérequis : Node.js 20+, Python 3.9+, MongoDB lancé sur `127.0.0.1:27017`.
 
 ```bash
-cd frontend
-yarn install
-yarn dev        # http://localhost:3000
+# backend/.env : MONGO_URL=mongodb://127.0.0.1:27017, DB_NAME=ma_finance, ANTHROPIC_API_KEY=...
+cd backend && python3 -m venv .venv && .venv/bin/pip install fastapi uvicorn motor python-dotenv anthropic
+.venv/bin/uvicorn server:app --port 8001
+
+cd frontend && npm install && npm run dev   # http://localhost:3000
 ```
+
+Au premier lancement (base vide), le relevé `frontend/src/data/releve-revolut.csv` est importé dans MongoDB.
 
 Autres commandes :
 
 ```bash
-yarn build      # build de production dans frontend/dist
-yarn typecheck  # vérification TypeScript
-yarn lint       # lint (oxlint)
+npm run build      # build de production dans frontend/dist
+npm run typecheck  # vérification TypeScript
+npm test           # tests (vitest)
 ```
 
-Le build (`frontend/dist`) est un site statique : il peut être hébergé sur n'importe quel hébergeur statique (GitHub Pages, Netlify, Vercel…).
 
 ---
 
@@ -96,7 +104,8 @@ frontend/src/
 │                   # Budgets, Épargne, Récurrences, Règles, Données
 ├── components/     # Coque de l'app, dialogues, rappels, bilan du mois, kit UI
 ├── lib/
-│   ├── store.ts        # état local + persistance localStorage
+│   ├── store.ts        # état + persistance via /api/data (MongoDB)
+│   ├── salary.ts       # paie, prochaine paie, trésorerie
 │   ├── types.ts        # modèle de données
 │   ├── revolut.ts      # normalisation des relevés Revolut
 │   ├── csv.ts          # import / export CSV

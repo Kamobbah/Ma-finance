@@ -1,15 +1,16 @@
 import asyncio
+import json
+from typing import Literal
+
+import anthropic
+from pydantic import BaseModel, Field
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Body, HTTPException
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field
-from typing import List
-import uuid
-from datetime import datetime
 
 
 ROOT_DIR = Path(__file__).parent
@@ -34,31 +35,66 @@ app = FastAPI(lifespan=lifespan)
 api_router = APIRouter(prefix="/api")
 
 
-# Define Models
-class StatusCheck(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+DATA_ID = "main"
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
 
-# Add your routes to the router instead of directly to app
-@api_router.get("/")
-async def root():
-    return {"message": "Hello World"}
+# ponytail: toutes les données de l'app dans un seul document (≈1 Mo pour 7 ans) ;
+# à découper en collections si on approche la limite de 16 Mo d'un document Mongo.
+@api_router.get("/data")
+async def get_data():
+    doc = await db.app_data.find_one({"_id": DATA_ID}, {"_id": 0})
+    if doc is None:
+        raise HTTPException(404, "Aucune donnée enregistrée")
+    return doc
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    _ = await db.status_checks.insert_one(status_obj.model_dump())
-    return status_obj
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    status_checks = await db.status_checks.find().to_list(1000)
-    return [StatusCheck(**status_check) for status_check in status_checks]
+@api_router.put("/data", status_code=204)
+async def put_data(data: dict = Body(...)):
+    await db.app_data.replace_one({"_id": DATA_ID}, data, upsert=True)
+
+
+RECEIPT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "amount": {"type": ["number", "null"], "description": "Total payé TTC, positif, en euros"},
+        "date": {"type": ["string", "null"], "description": "Date du ticket au format YYYY-MM-DD"},
+        "merchant": {"type": ["string", "null"], "description": "Nom de l'enseigne"},
+    },
+    "required": ["amount", "date", "merchant"],
+    "additionalProperties": False,
+}
+
+
+class Receipt(BaseModel):
+    image: str = Field(max_length=10_000_000)  # base64, ~7 Mo d'image
+    media_type: Literal["image/jpeg", "image/png", "image/webp", "image/gif"]
+
+
+@api_router.post("/receipt")
+async def read_receipt(r: Receipt):
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        raise HTTPException(503, "Ajoute ANTHROPIC_API_KEY dans backend/.env pour lire les tickets")
+    try:
+        msg = await anthropic.AsyncAnthropic().beta.messages.create(
+            model="claude-opus-5-5",
+            max_tokens=1024,
+            output_config={"effort": "low", "format": {"type": "json_schema", "schema": RECEIPT_SCHEMA}},
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
+            messages=[{"role": "user", "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": r.media_type, "data": r.image}},
+                {"type": "text", "text": "Ticket de caisse photographié. Donne le total payé, la date et l'enseigne. Null si illisible."},
+            ]}],
+        )
+    except anthropic.AuthenticationError:
+        raise HTTPException(503, "Clé ANTHROPIC_API_KEY invalide dans backend/.env")
+    except anthropic.APIError as e:
+        raise HTTPException(502, f"Lecture IA impossible : {e}")
+    if msg.stop_reason == "refusal":
+        raise HTTPException(422, "Ticket refusé par le modèle")
+    text = next((b.text for b in msg.content if b.type == "text"), "{}")
+    return json.loads(text)
+
 
 # Include the router in the main app
 app.include_router(api_router)

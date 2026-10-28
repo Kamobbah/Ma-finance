@@ -44,6 +44,7 @@ function r(name: string, conditions: RuleCondition[], category: string, setType?
 export function defaultRules(): Rule[] {
   return [
     r("Salaire (paie)", [desc("regex", "\\bpaie\\b"), dir("in")], "Salaire", "income"),
+    r("Salaire ALDI", [desc("contains", "ALDI MARCHE"), dir("in")], "Salaire", "income"),
     r("ALDI", [desc("contains", "ALDI"), dir("out")], "Courses", "expense"),
     r("Uber Eats", [desc("contains", "Uber Eats"), dir("out")], "Restaurants / livraison", "expense"),
     r("Free Mobile", [desc("contains", "Free Mobile"), dir("out")], "Téléphone", "expense"),
