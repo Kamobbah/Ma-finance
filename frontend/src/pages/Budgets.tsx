@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, CalendarRange, ChevronLeft, ChevronRight, MoreHorizontal, Pencil, Plus, SlidersHorizontal, Target, Trash2 } from "lucide-react";
+import { AlertTriangle, CalendarRange, Forward, ChevronLeft, ChevronRight, MoreHorizontal, Pencil, Plus, SlidersHorizontal, Target, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Chip, ConfirmDialog, EmptyState, Field, NativeSelect, PageHeader, Panel, PanelTitle, ProgressBar, StatCard, inputCls } from "@/components/kit";
 import { deleteBudget, saveBudget, useData } from "@/lib/store";
-import { averageSpent, budgetLimit, budgetStatuses, LEVEL_STYLES, levelOf, spentByCategory } from "@/lib/budgets";
+import { averageSpent, budgetLimit, budgetStatuses, effectiveLimit, LEVEL_STYLES, levelOf, shiftMonth, spentByCategory } from "@/lib/budgets";
+import { Checkbox } from "@/components/ui/checkbox";
 import { catColor } from "@/lib/analytics";
 import { money, MONTHS, MONTHS_LONG, round2, todayIso, uid } from "@/lib/format";
 import { parseAmount } from "@/lib/csv";
@@ -16,21 +17,18 @@ import type { Budget } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const mkLabel = (mk: string) => `${MONTHS_LONG[Number(mk.slice(5, 7)) - 1]} ${mk.slice(0, 4)}`;
-function shiftMonth(mk: string, delta: number) {
-  const [y, m] = mk.split("-").map(Number);
-  const d = new Date(y, m - 1 + delta, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
 
 function NewBudgetDialog({ open, onClose, mk }: { open: boolean; onClose: () => void; mk: string }) {
   const data = useData();
   const available = data.categories.filter((c) => c.name !== INTERNAL_CATEGORY && !data.budgets.some((b) => b.category === c.name));
   const [category, setCategory] = useState("");
   const [amount, setAmount] = useState("");
+  const [rollover, setRollover] = useState(true);
   useEffect(() => {
     if (open) {
       setCategory(available[0]?.name ?? "");
       setAmount("");
+      setRollover(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -39,7 +37,7 @@ function NewBudgetDialog({ open, onClose, mk }: { open: boolean; onClose: () => 
     const a = parseAmount(amount);
     if (!category) return toast.error("Choisissez une catégorie");
     if (a === null || a <= 0) return toast.error("Indiquez un plafond positif");
-    saveBudget({ id: uid(), category, amount: round2(a), overrides: {} });
+    saveBudget({ id: uid(), category, amount: round2(a), overrides: {}, rollover, startMonth: mk });
     toast.success(`Budget « ${category} » créé`);
     onClose();
   };
@@ -61,6 +59,13 @@ function NewBudgetDialog({ open, onClose, mk }: { open: boolean; onClose: () => 
             Utiliser la moyenne ({money(Math.ceil(avg))})
           </button>
         )}
+        <label className="flex items-start gap-2.5 rounded-2xl bg-slate-50 p-3 text-sm text-slate-700">
+          <Checkbox data-testid="budget-rollover-checkbox" checked={rollover} onCheckedChange={(c) => setRollover(!!c)} className="mt-0.5" />
+          <span>
+            <b className="font-semibold">Reporter le reste non dépensé</b>
+            <span className="block text-xs text-slate-500">Le reste positif s'ajoute au plafond du mois suivant (un dépassement n'est pas reporté).</span>
+          </span>
+        </label>
         <DialogFooter className="-mx-6 -mb-6 rounded-b-3xl px-6">
           <Button variant="outline" onClick={onClose}>
             Annuler
@@ -149,7 +154,7 @@ export default function Budgets() {
       <PageHeader
         eyebrow="Maîtriser ses dépenses"
         title="Budgets"
-        subtitle="Un plafond mensuel par catégorie, ajustable mois par mois. Alerte orange à 80 %, rouge au dépassement. Les virements internes ne sont jamais comptés."
+        subtitle="Un plafond mensuel par catégorie, ajustable mois par mois, avec report automatique du reste non dépensé. Alerte orange à 80 %, rouge au dépassement. Les virements internes ne sont jamais comptés."
         actions={
           <Button data-testid="new-budget-button" className="h-10 rounded-xl" onClick={() => setNewOpen(true)}>
             <Plus /> Nouveau budget
@@ -201,6 +206,11 @@ export default function Budgets() {
                       {s.level !== "ok" && <AlertTriangle className="size-3" />} {st.label}
                     </Chip>
                     {overridden && <Chip className="bg-blue-50 text-blue-700 ring-blue-200">Ajusté ce mois</Chip>}
+                    {s.carry > 0 && (
+                      <Chip testid="budget-carry" className="bg-violet-50 text-violet-700 ring-violet-200">
+                        <Forward className="size-3" /> +{money(s.carry)} reportés
+                      </Chip>
+                    )}
                     <div className="ml-auto flex items-center gap-3">
                       <p className="text-sm tabular">
                         <b data-testid="budget-spent" className={st.text}>
@@ -219,6 +229,16 @@ export default function Budgets() {
                           <DropdownMenuItem data-testid="budget-edit-default" onClick={() => setLimitTarget({ budget: s.budget, mode: "default", mk })}>
                             <Pencil /> Plafond par défaut
                           </DropdownMenuItem>
+                          <DropdownMenuItem
+                            data-testid="budget-toggle-rollover"
+                            onClick={() => {
+                              const on = s.budget.rollover === false;
+                              saveBudget({ ...s.budget, rollover: on, startMonth: s.budget.startMonth ?? mk });
+                              toast.success(on ? "Report du reste activé" : "Report du reste désactivé");
+                            }}
+                          >
+                            <Forward /> {s.budget.rollover === false ? "Activer le report du reste" : "Désactiver le report du reste"}
+                          </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem variant="destructive" data-testid="budget-delete" onClick={() => setToDelete(s.budget)}>
                             <Trash2 /> Supprimer
@@ -234,7 +254,10 @@ export default function Budgets() {
                     <span data-testid="budget-percent" className={cn("font-semibold", st.text)}>
                       {Math.round(s.ratio * 100)} %
                     </span>
-                    <span>{s.remaining >= 0 ? `Reste ${money(s.remaining)}` : `Dépassement de ${money(-s.remaining)}`}</span>
+                    <span>
+                      {s.carry > 0 && <span className="mr-2 text-slate-400">Plafond {money(s.base)} + report {money(s.carry)}</span>}
+                      {s.remaining >= 0 ? `Reste ${money(s.remaining)}` : `Dépassement de ${money(-s.remaining)}`}
+                    </span>
                   </div>
                 </li>
               );
@@ -270,7 +293,7 @@ export default function Budgets() {
                     <td className="whitespace-nowrap px-5 py-2 font-semibold text-slate-700">{b.category}</td>
                     {MONTHS.map((_, i) => {
                       const k = `${year}-${String(i + 1).padStart(2, "0")}`;
-                      const limit = budgetLimit(b, k);
+                      const limit = effectiveLimit(data, b, k);
                       const spent = round2(Math.max(0, yearSpent[i].get(b.category) ?? 0));
                       const future = k > currentMk;
                       const lvl = levelOf(spent, limit);

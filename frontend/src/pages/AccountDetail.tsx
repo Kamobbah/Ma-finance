@@ -9,6 +9,7 @@ import { accountBalance, balanceSeries, catColor } from "@/lib/analytics";
 import { ACCOUNT_TYPE_LABELS, compact, fmtDate, money, MONTHS, round2, todayIso } from "@/lib/format";
 import { yearOptions } from "@/lib/ui";
 import { cn } from "@/lib/utils";
+import PocketGoalPanel from "@/components/PocketGoal";
 
 function FlowList({ title, sub, items, testid, empty }: { title: string; sub: string; items: { name: string; value: number; color: string; count: number }[]; testid: string; empty: string }) {
   const max = Math.max(1, ...items.map((i) => i.value));
@@ -141,6 +142,8 @@ export default function AccountDetail() {
         <StatCard testid="account-expense-card" tone="expense" label={`Dépenses ${year}`} value={money(spent, acc.currency)} sub="Dépenses réelles" />
         <StatCard testid="account-income-card" tone="income" label={`Revenus ${year}`} value={money(earned, acc.currency)} sub="Revenus réels" />
       </div>
+
+      {acc.type === "pocket" && <PocketGoalPanel acc={acc} />}
 
       {yearTx.length === 0 && series.length <= 2 ? (
         <Panel className="mt-5">

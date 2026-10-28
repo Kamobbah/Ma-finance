@@ -10,7 +10,10 @@ import { accountBalance, categoryBreakdown, monthly, plannedOccurrences, scopedT
 import { compact, fmtDate, money, MONTHS, MONTHS_LONG, todayIso } from "@/lib/format";
 import { buttonVariants } from "@/components/ui/button";
 import type { Recurrence } from "@/lib/types";
-import { budgetStatuses, LEVEL_STYLES } from "@/lib/budgets";
+import { budgetStatuses, LEVEL_STYLES, shiftMonth } from "@/lib/budgets";
+import { computeRecap } from "@/lib/insights";
+import { openRecap } from "@/lib/ui";
+import { CalendarCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function Dashboard() {
@@ -43,6 +46,8 @@ export default function Dashboard() {
   const chartData = months.map((m) => ({ name: MONTHS[m.month], Revenus: m.inc, Dépenses: m.exp, Net: m.net }));
   const hasYearData = yearTx.length > 0;
 
+  const recapMk = shiftMonth(monthPrefix, -1);
+  const recap = useMemo(() => computeRecap(data, recapMk), [data, recapMk]);
   const budgetAlerts = budgetStatuses(data, monthPrefix).filter((b) => b.level !== "ok").sort((a, b) => b.ratio - a.ratio);
 
   const pauseRec = (id: string) => {
@@ -86,6 +91,36 @@ export default function Dashboard() {
           <StatCard testid="kpi-month-card" tone="plain" label={`Ce mois-ci · ${MONTHS_LONG[Number(monthPrefix.slice(5)) - 1]}`} value={money(thisMonth.net, "EUR", true)} icon={<Wallet className="size-4 text-slate-700" />} sub={`${money(thisMonth.inc)} entrés · ${money(thisMonth.exp)} sortis`} />
         </div>
       </div>
+
+      {recap.txCount > 0 && (
+        <button
+          data-testid="dashboard-recap-card"
+          onClick={() => openRecap(recapMk)}
+          className="mt-5 flex w-full flex-wrap items-center gap-x-6 gap-y-2 rounded-3xl border border-slate-200/60 bg-white p-4 pl-5 text-left shadow-[0_4px_24px_-8px_rgba(15,23,42,0.06)] transition-[box-shadow,transform] hover:-translate-y-0.5 hover:shadow-md animate-rise"
+        >
+          <span className="flex items-center gap-3">
+            <span className="grid size-10 place-items-center rounded-2xl bg-slate-900 text-white">
+              <CalendarCheck className="size-4" />
+            </span>
+            <span>
+              <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Bilan du mois écoulé</span>
+              <span className="block font-bold text-slate-900">{MONTHS_LONG[Number(recapMk.slice(5)) - 1]} {recapMk.slice(0, 4)}</span>
+            </span>
+          </span>
+          <span className="text-sm text-slate-600">
+            Net <b className={cn("tabular", recap.cur.net >= 0 ? "text-emerald-700" : "text-rose-700")}>{money(recap.cur.net, "EUR", true)}</b>
+          </span>
+          {recap.budgets.length > 0 && (
+            <span className="text-sm text-slate-600">
+              Budgets tenus <b className="text-slate-900">{recap.budgets.filter((b) => b.held).length}/{recap.budgets.length}</b>
+            </span>
+          )}
+          <span className="text-sm text-slate-600">
+            Épargne <b className="tabular text-slate-900">{money(recap.savings.end - recap.savings.start, "EUR", true)}</b>
+          </span>
+          <span className="ml-auto text-sm font-semibold text-slate-900">Voir le bilan →</span>
+        </button>
+      )}
 
       {budgetAlerts.length > 0 && (
         <div data-testid="dashboard-budget-alerts" className="mt-5 flex flex-wrap items-center gap-2 rounded-3xl border border-amber-200/70 bg-amber-50/60 p-3 pl-4 animate-rise">

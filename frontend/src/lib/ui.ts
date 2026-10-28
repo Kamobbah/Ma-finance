@@ -59,3 +59,24 @@ export function yearOptions(data: AppData): Opt[] {
   ys.add(Math.max(...ys) + 1);
   return [...ys].sort((a, b) => b - a).map((y) => ({ value: String(y), label: String(y) }));
 }
+
+/* Dialogue global « Bilan du mois » */
+let recap: { open: boolean; mk: string } = { open: false, mk: "" };
+const rl = new Set<() => void>();
+export function useRecapDialog() {
+  return useSyncExternalStore(
+    (l) => {
+      rl.add(l);
+      return () => rl.delete(l);
+    },
+    () => recap,
+  );
+}
+export function openRecap(mk: string) {
+  recap = { open: true, mk };
+  rl.forEach((l) => l());
+}
+export function closeRecap() {
+  recap = { ...recap, open: false };
+  rl.forEach((l) => l());
+}

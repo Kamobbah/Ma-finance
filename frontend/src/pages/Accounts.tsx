@@ -8,6 +8,7 @@ import { accountBalance, balanceSeries } from "@/lib/analytics";
 import { money, round2, todayIso } from "@/lib/format";
 import { yearOptions } from "@/lib/ui";
 import type { Account, AccountType } from "@/lib/types";
+import { PocketGoalMini } from "@/components/PocketGoal";
 
 const SECTIONS: { type: AccountType; title: string; sub: string }[] = [
   { type: "main", title: "Compte principal", sub: "Votre compte courant Revolut" },
@@ -46,6 +47,7 @@ function AccountCard({ acc, year }: { acc: Account; year: number }) {
       <p data-testid={`account-card-balance-${acc.id}`} className="mt-3 text-2xl font-extrabold tabular text-slate-900">
         {money(bal, acc.currency)}
       </p>
+      <PocketGoalMini acc={acc} balance={bal} />
       <div className="-mx-1 mt-2 h-14">
         {series.length > 1 && (
           <ResponsiveContainer width="100%" height="100%">

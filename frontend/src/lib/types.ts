@@ -13,6 +13,13 @@ export interface Account {
   icon?: string;
   archived: boolean;
   parentId?: string;
+  goal?: PocketGoal;
+}
+
+export interface PocketGoal {
+  target: number;
+  targetDate?: string;
+  label?: string;
 }
 
 export interface Transaction {
@@ -111,6 +118,8 @@ export interface Budget {
   category: string;
   amount: number; // plafond mensuel par défaut
   overrides: Record<string, number>; // "YYYY-MM" -> plafond spécifique
+  rollover?: boolean; // reporter le reste positif sur le mois suivant
+  startMonth?: string; // "YYYY-MM" : premier mois du budget (départ du report)
 }
 
 export interface AppData {
@@ -129,4 +138,6 @@ export interface Prefs {
   accountFilter: string; // "all" | "pockets" | accountId
   year: number;
   includeInternal: boolean;
+  lastRecapSeen?: string; // "YYYY-MM" du dernier bilan affiché
+  dismissedReminders?: string[];
 }
