@@ -3,7 +3,7 @@ import { fromIso, money, MONTHS_LONG, round2, todayIso, toIso } from "./format";
 
 export const kindOf = (g: Goal): GoalKind => g.kind ?? "target";
 export const priorityOf = (g: Goal): GoalPriority => g.priority ?? "important";
-export const hasTarget = (g: Goal) => kindOf(g) === "target" && g.target > 0;
+export const hasTarget = (g: Goal) => (kindOf(g) === "target" || kindOf(g) === "debt") && g.target > 0;
 export const isReached = (g: Goal) => hasTarget(g) && g.allocated >= g.target - 0.005;
 export const plannedOf = (g: Goal) => (g.monthly && g.monthly > 0 ? g.monthly : 0);
 
@@ -11,6 +11,7 @@ export const KIND_LABELS: Record<GoalKind, { label: string; hint: string }> = {
   target: { label: "Objectif cible", hint: "Un montant à atteindre, avec ou sans date" },
   open: { label: "Objectif ouvert", hint: "Une réserve sans montant final" },
   monthly: { label: "Objectif mensuel", hint: "Un versement régulier chaque mois" },
+  debt: { label: "Dette", hint: "Un montant à rembourser par mensualités" },
 };
 
 export const PRIORITY: Record<GoalPriority, { label: string; cls: string; rank: number }> = {
@@ -111,6 +112,7 @@ export function goalStats(g: Goal, today = todayIso()): GoalStats {
 
 /** Phrase de statut contextuelle affichée sur la carte. */
 export function goalStatusLine(g: Goal, s: GoalStats): string {
+  if (s.kind === "debt") return `Restant dû : ${money(s.remaining ?? 0)}${s.planned ? ` · ${money(s.planned)}/mois` : ""}${s.eta && !s.reached ? ` · fin prévue ${monthYear(s.eta)}` : s.reached ? " · soldée" : ""}`;
   if (s.kind === "open") return `Alloué : ${money(g.allocated)} · ${s.planned ? `Prévu : ${money(s.planned)}/mois` : "Aucun versement prévu"}`;
   if (s.kind === "monthly") return `Prévu : ${money(s.planned)}/mois · Projeté cette année : ${money(s.projectedYear ?? g.allocated)}`;
   if (s.target === null) return `Alloué : ${money(g.allocated)}`;

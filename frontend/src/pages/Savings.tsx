@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import { toastUndo } from "@/lib/undo";
 import { AlertTriangle, Archive, ArrowDownToLine, ArrowUpFromLine, CheckCircle2, ChevronDown, Lock, MoreHorizontal, Pencil, PiggyBank, Plus, RefreshCcw, Scale, Sparkles, Split, Trash2, Undo2, Wand2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -10,7 +11,7 @@ import { allocate, deleteGoal, saveGoal, saveGoals, useData } from "@/lib/store"
 import { accountBalance } from "@/lib/analytics";
 import { fmtDate, money, round2, todayIso, uid } from "@/lib/format";
 import { parseAmount } from "@/lib/csv";
-import { goalStats, goalStatusLine, hasTarget, interestEstimate, KIND_LABELS, kindOf, PRIORITY, priorityOf, splitByNeed, splitByWeights, suggestAllocation, syncGoalStatus, type GoalStats } from "@/lib/goals";
+import { monthsBetween, goalStats, goalStatusLine, hasTarget, interestEstimate, KIND_LABELS, kindOf, PRIORITY, priorityOf, splitByNeed, splitByWeights, suggestAllocation, syncGoalStatus, type GoalStats } from "@/lib/goals";
 import type { Goal, GoalKind, GoalPriority, GoalStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +24,7 @@ const STATUS: Record<GoalStatus, { label: string; cls: string }> = {
   abandoned: { label: "Abandonné", cls: "bg-rose-50 text-rose-700 ring-rose-200" },
   archived: { label: "Archivé", cls: "bg-slate-100 text-slate-500 ring-slate-200" },
 };
-const KINDS: GoalKind[] = ["target", "open", "monthly"];
+const KINDS: GoalKind[] = ["target", "open", "monthly", "debt"];
 const PRIORITIES: GoalPriority[] = ["essential", "important", "bonus"];
 const fr = (v: number) => String(round2(v)).replace(".", ",");
 const EPS = 0.005;
@@ -46,6 +47,8 @@ function GoalDialog({ mode, onClose, unallocated }: { mode: DialogMode | null; o
   const [priority, setPriority] = useState<GoalPriority>("important");
   const [status, setStatus] = useState<GoalStatus>("active");
   const [custom, setCustom] = useState(false);
+  const [accountId, setAccountId] = useState("");
+  const accounts = useData().accounts.filter((a) => !a.archived && a.currency === "EUR");
   useEffect(() => {
     if (!mode) return;
     const renew = mode.kind === "renew";
@@ -63,6 +66,7 @@ function GoalDialog({ mode, onClose, unallocated }: { mode: DialogMode | null; o
     setCustom(!COLORS.includes(c) || !ICONS.includes(i));
     setPriority(goal ? priorityOf(goal) : "important");
     setStatus(goal?.status ?? "active");
+    setAccountId(goal?.accountId ?? "");
   }, [mode, goal, source]);
 
   const available = source ? source.allocated : unallocated;
@@ -73,13 +77,15 @@ function GoalDialog({ mode, onClose, unallocated }: { mode: DialogMode | null; o
     const mn = parseAmount(minimum);
     if (!name.trim()) return toast.error("Donnez un nom à l'objectif");
     if (kind === "target" && (!t || t <= 0)) return toast.error("Un objectif cible demande un montant cible supérieur à 0 €");
+    if (kind === "debt" && (!t || t <= 0)) return toast.error("Indiquez le montant total à rembourser");
+    if (kind === "debt" && (!m || m <= 0)) return toast.error("Indiquez la mensualité de remboursement");
     if (kind === "monthly" && (!m || m <= 0)) return toast.error("Un objectif mensuel demande un versement mensuel supérieur à 0 €");
     if (m !== null && m < 0) return toast.error("Le versement mensuel ne peut pas être négatif");
     if (mn !== null && mn < 0) return toast.error("Le minimum souhaité ne peut pas être négatif");
     if (init < 0) return toast.error("Le montant alloué ne peut pas être négatif");
     if (!goal && init > Math.max(0, available) + EPS) return toast.error(`Vous ne pouvez allouer que ${money(Math.max(0, available))} au maximum`);
     if (!icon.trim()) return toast.error("Choisissez une icône");
-    const base = { name: name.trim(), kind, target: kind === "target" ? round2(t ?? 0) : 0, monthly: m && m > 0 ? round2(m) : undefined, minimum: kind !== "target" && mn && mn > 0 ? round2(mn) : undefined, targetDate: kind === "open" ? undefined : targetDate || undefined, color, icon: icon.trim(), priority };
+    const base = { name: name.trim(), kind, target: kind === "target" || kind === "debt" ? round2(t ?? 0) : 0, accountId: accountId || undefined, monthly: m && m > 0 ? round2(m) : undefined, minimum: (kind === "open" || kind === "monthly") && mn && mn > 0 ? round2(mn) : undefined, targetDate: kind === "open" || kind === "debt" ? undefined : targetDate || undefined, color, icon: icon.trim(), priority };
     const today = todayIso();
     if (goal) {
       const next = syncGoalStatus({ ...goal, ...base, status: mode?.kind === "renew" ? "active" : status, reachedAck: mode?.kind === "renew" ? false : goal.reachedAck });
@@ -120,7 +126,7 @@ function GoalDialog({ mode, onClose, unallocated }: { mode: DialogMode | null; o
           </Field>
           <div className="col-span-2">
             <p className="mb-1.5 text-xs font-semibold text-slate-600">Type d'objectif</p>
-            <div className="grid grid-cols-3 gap-1.5 rounded-2xl bg-slate-100/80 p-1" role="radiogroup">
+            <div className="grid grid-cols-2 gap-1.5 rounded-2xl bg-slate-100/80 p-1 sm:grid-cols-4" role="radiogroup">
               {KINDS.map((k) => (
                 <button
                   key={k}
@@ -137,20 +143,23 @@ function GoalDialog({ mode, onClose, unallocated }: { mode: DialogMode | null; o
               ))}
             </div>
           </div>
-          {kind === "target" && (
-            <Field label="Montant cible (€)">
+          {(kind === "target" || kind === "debt") && (
+            <Field label={kind === "debt" ? "Montant total dû (€)" : "Montant cible (€)"}>
               <Input data-testid="goal-target-input" inputMode="decimal" value={target} onChange={(e) => setTarget(e.target.value)} placeholder="3 000" className={inputCls} autoFocus={mode?.kind === "renew"} />
             </Field>
           )}
-          <Field label={kind === "monthly" ? "Mensuel prévu (€)" : "Mensuel prévu (€, facultatif)"} className={kind === "target" ? "" : "col-span-2 sm:col-span-1"}>
+          <Field label={kind === "debt" ? "Mensualité (€)" : kind === "monthly" ? "Mensuel prévu (€)" : "Mensuel prévu (€, facultatif)"} className={kind === "target" || kind === "debt" ? "" : "col-span-2 sm:col-span-1"}>
             <Input data-testid="goal-monthly-input" inputMode="decimal" value={monthly} onChange={(e) => setMonthly(e.target.value)} placeholder="100" className={inputCls} />
           </Field>
-          {kind !== "target" && (
+          {(kind === "open" || kind === "monthly") && (
             <Field label="Minimum souhaité (€, facultatif)" className="col-span-2 sm:col-span-1" hint="Le seuil à garder au minimum sur cet objectif">
               <Input data-testid="goal-minimum-input" inputMode="decimal" value={minimum} onChange={(e) => setMinimum(e.target.value)} placeholder="500" className={inputCls} />
             </Field>
           )}
-          {kind !== "open" && (
+          <Field label="Compte / Pocket lié (facultatif)" className="col-span-2 sm:col-span-1">
+            <NativeSelect testid="goal-account-select" value={accountId} onChange={setAccountId} options={accounts.map((a) => ({ value: a.id, label: a.name }))} placeholder="Aucun" />
+          </Field>
+          {kind !== "open" && kind !== "debt" && (
             <Field label={kind === "monthly" ? "Date de fin (facultative)" : "Date cible (facultative)"} className={kind === "target" ? "col-span-2" : "col-span-2 sm:col-span-1"}>
               <Input data-testid="goal-date-input" type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} className={inputCls} />
             </Field>
@@ -162,7 +171,7 @@ function GoalDialog({ mode, onClose, unallocated }: { mode: DialogMode | null; o
               </Field>
             )
           ) : (
-            <Field label={source ? "Montant transféré (€)" : "Déjà alloué (€)"} className="col-span-2 sm:col-span-1" hint={`Disponible : ${money(Math.max(0, available))}`}>
+            <Field label={source ? "Montant transféré (€)" : kind === "debt" ? "Déjà remboursé (€)" : "Déjà alloué (€)"} className="col-span-2 sm:col-span-1" hint={`Disponible : ${money(Math.max(0, available))}`}>
               <Input data-testid="goal-initial-input" inputMode="decimal" value={initial} onChange={(e) => setInitial(e.target.value)} placeholder="0" className={inputCls} />
             </Field>
           )}
@@ -299,6 +308,8 @@ function SplitDialog({ open, onClose, goals, unallocated }: { open: boolean; onC
   const [total, setTotal] = useState("");
   const [parts, setParts] = useState<Record<string, string>>({});
   const [method, setMethod] = useState<string>("");
+  const accts = useData().accounts.filter((a) => !a.archived && a.currency === "EUR");
+  const [sourceAcc, setSourceAcc] = useState(accts.find((a) => a.type === "savings")?.id ?? "");
   useEffect(() => {
     if (open) {
       setTotal(unallocated > 0 ? fr(unallocated) : "");
@@ -341,7 +352,7 @@ function SplitDialog({ open, onClose, goals, unallocated }: { open: boolean; onC
     const amounts: Record<string, number> = {};
     goals.forEach((g, i) => values[i] > 0 && (amounts[g.id] = round2(values[i])));
     if (!Object.keys(amounts).length) return toast.error("Indiquez au moins un montant");
-    allocate(amounts);
+    allocate(amounts, sourceAcc || undefined);
     toast.success(`${money(sum)} répartis entre ${Object.keys(amounts).length} objectif${Object.keys(amounts).length > 1 ? "s" : ""}`, { description: left > 0 ? `${money(left)} restent dans le non alloué` : undefined });
     onClose();
   };
@@ -360,6 +371,9 @@ function SplitDialog({ open, onClose, goals, unallocated }: { open: boolean; onC
         </DialogHeader>
         <Field label="Montant du versement (€)" hint={`Non alloué disponible : ${money(max)}`}>
           <Input data-testid="split-total-input" inputMode="decimal" value={total} onChange={(e) => setTotal(e.target.value)} className={cn(inputCls, "max-w-xs")} />
+        </Field>
+        <Field label="Provenance du versement">
+          <NativeSelect testid="split-source-select" value={sourceAcc} onChange={setSourceAcc} options={accts.map((a) => ({ value: a.id, label: a.name }))} placeholder="Non précisée" className="max-w-xs" />
         </Field>
         <div className="flex flex-wrap gap-2">
           {methods.map((m) => (
@@ -444,7 +458,7 @@ interface CompletionHandlers {
 function CompletionActions({ g, handlers, compact }: { g: Goal; handlers: CompletionHandlers; compact?: boolean }) {
   const today = todayIso();
   const archive = () => {
-    saveGoal({ ...g, status: "archived" });
+    saveGoal({ ...g, status: "archived", archivedAt: todayIso() });
     toast.success(`« ${g.name} » archivé`, { description: `Ses ${money(g.allocated)} restent alloués` });
   };
   const keep = () => {
@@ -452,7 +466,7 @@ function CompletionActions({ g, handlers, compact }: { g: Goal; handlers: Comple
     toast.success("Fonds conservés sur l'objectif");
   };
   const release = () => {
-    saveGoal({ ...g, allocated: 0, status: "archived", history: [...g.history, { date: today, amount: -g.allocated }] });
+    saveGoal({ ...g, allocated: 0, status: "archived", archivedAt: today, history: [...g.history, { date: today, amount: -g.allocated }] });
     toast.success(`${money(g.allocated)} remis dans le non alloué`, { description: `« ${g.name} » est archivé` });
   };
   const btn = "h-8 rounded-xl text-xs";
@@ -512,8 +526,10 @@ function goalMetrics(g: Goal, s: GoalStats, prefix: string) {
 }
 
 function DetailDialog({ goal, onClose, handlers, onEdit }: { goal: Goal | null; onClose: () => void; handlers: CompletionHandlers; onEdit: (g: Goal) => void }) {
+  const accountsAll = useData().accounts;
   if (!goal) return null;
   const s = goalStats(goal);
+  const accNameOf = (id: string) => accountsAll.find((a) => a.id === id)?.name ?? "—";
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent data-testid="goal-detail-dialog" className="max-h-[92vh] overflow-y-auto rounded-3xl p-6 sm:max-w-lg">
@@ -558,7 +574,10 @@ function DetailDialog({ goal, onClose, handlers, onEdit }: { goal: Goal | null; 
             <ul className="max-h-40 space-y-1 overflow-y-auto pr-1" data-testid="goal-history">
               {[...goal.history].reverse().map((h, i) => (
                 <li key={i} className="flex justify-between rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs">
-                  <span className="text-slate-500">{fmtDate(h.date)}</span>
+                  <span className="text-slate-500">
+                    {fmtDate(h.date)}
+                    {h.source && <span className="ml-1.5 text-slate-400">· {accNameOf(h.source)}</span>}
+                  </span>
                   <span className={cn("font-semibold tabular", h.amount >= 0 ? "text-emerald-700" : "text-slate-700")}>{money(h.amount, "EUR", true)}</span>
                 </li>
               ))}
@@ -603,7 +622,12 @@ function BehindWarning() {
 
 /* ---------------- Carte ---------------- */
 function GoalCard({ g, onDetail, onEdit, onAlloc, onDelete, handlers }: { g: Goal; onDetail: () => void; onEdit: () => void; onAlloc: (mode: "add" | "remove") => void; onDelete: () => void; handlers: CompletionHandlers }) {
+  const accountsList = useData().accounts;
   const s = goalStats(g);
+  const accName = (id: string) => accountsList.find((a) => a.id === id)?.name ?? "—";
+  const saved = round2(g.history.filter((h) => h.amount > 0).reduce((a, h) => a + h.amount, 0));
+  const lastMove = g.history.length ? g.history[g.history.length - 1].date : g.createdAt.slice(0, 10);
+  const months = Math.max(0, Math.round(monthsBetween(g.createdAt.slice(0, 10), g.archivedAt ?? lastMove)));
   const essential = priorityOf(g) === "essential";
   const archived = g.status === "archived" || g.status === "abandoned";
   return (
@@ -633,7 +657,8 @@ function GoalCard({ g, onDetail, onEdit, onAlloc, onDelete, handlers }: { g: Goa
                 g.status !== "active" && <Chip className={STATUS[g.status].cls}>{STATUS[g.status].label}</Chip>
               )}
               <PriorityChip g={g} testid="goal-priority" />
-              {s.kind !== "target" && <Chip className="bg-white text-slate-500 ring-slate-200">{s.kind === "open" ? "Ouvert" : "Mensuel"}</Chip>}
+              {s.kind !== "target" && <Chip className="bg-white text-slate-500 ring-slate-200">{s.kind === "open" ? "Ouvert" : s.kind === "debt" ? "Dette" : "Mensuel"}</Chip>}
+              {g.accountId && <Chip testid="goal-account-chip" className="bg-white text-slate-500 ring-slate-200">{accName(g.accountId)}</Chip>}
             </div>
           </div>
         </button>
@@ -649,7 +674,7 @@ function GoalCard({ g, onDetail, onEdit, onAlloc, onDelete, handlers }: { g: Goa
               <Pencil /> Modifier
             </DropdownMenuItem>
             {g.status !== "archived" ? (
-              <DropdownMenuItem data-testid="goal-archive" onClick={() => saveGoal({ ...g, status: "archived" })}>
+              <DropdownMenuItem data-testid="goal-archive" onClick={() => saveGoal({ ...g, status: "archived", archivedAt: todayIso() })}>
                 <Archive /> Archiver
               </DropdownMenuItem>
             ) : (
@@ -712,6 +737,11 @@ function GoalCard({ g, onDetail, onEdit, onAlloc, onDelete, handlers }: { g: Goa
         </div>
       )}
       {s.reached && !archived && !g.reachedAck && <CompletionActions g={g} handlers={handlers} compact />}
+      {archived && (
+        <p data-testid="goal-archived-summary" className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          Épargné au total <b className="tabular text-slate-900">{money(saved)}</b> · durée {months} mois
+        </p>
+      )}
       {!archived && (
         <div className="mt-4 flex gap-2">
           <Button size="sm" data-testid="goal-allocate-button" className="flex-1 rounded-xl" onClick={() => onAlloc("add")}>
@@ -741,6 +771,7 @@ export default function Savings() {
     [data.transactions, today],
   );
   const interest = useMemo(() => interestEstimate(data, today), [data, today]);
+  const interestAll = round2(data.transactions.filter((t) => savingsAccounts.some((a) => a.id === t.accountId) && t.category === "Intérêts").reduce((s, t) => s + t.amount, 0));
   const activeOnly = data.goals.filter((g) => g.status === "active");
   const plannedMonthly = round2(activeOnly.reduce((s, g) => s + goalStats(g, today).planned, 0));
   const plannedRest = round2(activeOnly.reduce((s, g) => {
@@ -781,7 +812,7 @@ export default function Savings() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard testid="savings-real-card" tone="savings" label="Solde réel du compte d'épargne" value={money(real)} icon={<PiggyBank className="size-4 text-amber-700" />} sub={`Intérêts nets ${today.slice(0, 4)} : ${money(interestYear)}`} />
         <StatCard testid="savings-allocated-card" tone="net" label="Alloué aux objectifs" value={money(allocated)} sub={`${counted.length} objectif${counted.length > 1 ? "s" : ""} (hors abandonnés)`} />
-        <StatCard testid="savings-unallocated-card" tone={over ? "expense" : "income"} label="Non alloué" value={money(unallocated, "EUR")} sub={over ? "Vos objectifs dépassent le solde réel" : "Disponible pour vos objectifs"} />
+        <StatCard testid="savings-unallocated-card" tone={over ? "expense" : "income"} label="Non alloué" value={money(unallocated, "EUR")} sub={`${over ? "Vos objectifs dépassent le solde réel" : "Disponible pour vos objectifs"} · dont intérêts cumulés ${money(interestAll)} (suivis à part)`} />
       </div>
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard testid="savings-planned-card" label="Épargne mensuelle prévue" value={money(plannedMonthly)} sub={`Somme des mensuels prévus · ${activeOnly.length} objectif${activeOnly.length > 1 ? "s" : ""} actif${activeOnly.length > 1 ? "s" : ""}`} />
@@ -873,7 +904,7 @@ export default function Savings() {
         description={`« ${toDelete?.name} » sera supprimé et son montant alloué (${money(toDelete?.allocated ?? 0)}) redeviendra non alloué.`}
         onConfirm={() => {
           if (toDelete) deleteGoal(toDelete.id);
-          toast.success("Objectif supprimé");
+          toastUndo("Objectif supprimé");
         }}
       />
     </div>

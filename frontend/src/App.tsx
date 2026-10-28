@@ -7,6 +7,7 @@ import Dashboard from "@/pages/Dashboard";
 import Operations from "@/pages/Operations";
 import Annual from "@/pages/Annual";
 import Years from "@/pages/Years";
+import Cashflow from "@/pages/Cashflow";
 import Savings from "@/pages/Savings";
 import Recurrences from "@/pages/Recurrences";
 import Rules from "@/pages/Rules";
@@ -14,7 +15,9 @@ import DataPage from "@/pages/Data";
 import Budgets from "@/pages/Budgets";
 import Accounts from "@/pages/Accounts";
 import AccountDetail from "@/pages/AccountDetail";
-import { bootCreatedCount, bootSeedMigrated, initStore, useReady } from "@/lib/store";
+import { autoBackup, bootCreatedCount, bootSeedMigrated, initStore, useReady } from "@/lib/store";
+import { runAutoBudgetPrep } from "@/lib/budgetPrep";
+import { MONTHS_LONG } from "@/lib/format";
 
 let booted = false;
 
@@ -25,12 +28,16 @@ export default function App() {
   useEffect(() => {
     if (booted) return;
     booted = true;
-    initStore().catch(() => setBootError(true)).then(() => {
+    // Jamais de suite après un échec : rien ne doit écrire des données vides par-dessus la base.
+    initStore().then(() => {
       if (bootSeedMigrated())
         setTimeout(() => toast.success("Historique mis à jour", { description: "Le relevé complet depuis l'ouverture du compte a été chargé. Vos saisies, règles, budgets et objectifs sont conservés.", duration: 8000 }), 300);
       const n = bootCreatedCount();
       if (n) setTimeout(() => toast.success(`${n} opération(s) récurrente(s) créée(s) automatiquement`), 400);
-    });
+      autoBackup().catch(() => undefined);
+      const prepared = runAutoBudgetPrep();
+      if (prepared) setTimeout(() => toast.info(`Budgets de ${MONTHS_LONG[Number(prepared.slice(5)) - 1].toLowerCase()} préparés`, { description: "Vérifiez les plafonds puis validez-les depuis le rappel" }), 700);
+    }, () => setBootError(true));
   }, []);
 
   if (!ready)
@@ -54,6 +61,7 @@ export default function App() {
         <Route path="/comptes/:id" element={<AccountDetail />} />
         <Route path="/analyse" element={<Annual />} />
         <Route path="/bilan" element={<Years />} />
+        <Route path="/tresorerie" element={<Cashflow />} />
         <Route path="/budgets" element={<Budgets />} />
         <Route path="/epargne" element={<Savings />} />
         <Route path="/recurrences" element={<Recurrences />} />
