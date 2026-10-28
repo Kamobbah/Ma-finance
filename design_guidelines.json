@@ -1,0 +1,237 @@
+{
+  "theme": {
+    "mode": "light_first",
+    "description": "Style 'Clair et doux' inspiré du concept Dribbble : fond chaud et doux (teinte lin/ivoire subtile #F8F9FA / #F4F6F8), grandes cartes blanches nettes avec bords arrondis (rounded-2xl / rounded-3xl), ombres diffuses ultra-douces, bordures 1px délicates, typographie hiérarchisée et accents pastel raffinés (émeraude sauge pour les revenus/positif, corail doux pour les dépenses, bleu ardoise pour les virements, ambre doré pour les alertes/épargne)."
+  },
+  "typography": {
+    "font_family_heading": "Plus Jakarta Sans, sans-serif",
+    "font_family_body": "Plus Jakarta Sans, sans-serif",
+    "font_family_mono": "JetBrains Mono, monospace",
+    "import_instruction": "@import \"@fontsource-variable/plus-jakarta-sans\"; @import \"@fontsource-variable/jetbrains-mono\"; in frontend/src/index.css",
+    "scale_px": {
+      "display": 48,
+      "h1": 36,
+      "h2": 28,
+      "h3": 20,
+      "body": 16,
+      "caption": 14
+    },
+    "rules": {
+      "kpi_numbers": "text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-slate-900 font-sans tabular-nums",
+      "currency_symbol": "text-lg sm:text-xl font-medium text-slate-400 ml-1",
+      "section_titles": "text-xl sm:text-2xl font-bold tracking-tight text-slate-900",
+      "card_headers": "text-sm sm:text-base font-semibold text-slate-700 tracking-wide uppercase text-xs text-slate-500",
+      "table_cells": "text-sm text-slate-700 font-normal",
+      "badges_labels": "text-xs font-semibold tracking-wider"
+    }
+  },
+  "colors": {
+    "surfaces": [
+      {
+        "name": "page",
+        "kind": "solid",
+        "bg": "#F8FAFC",
+        "on_bg": "#0F172A",
+        "on_bg_muted": "#475569",
+        "roles": {
+          "link": "#2563EB",
+          "error": "#DC2626",
+          "success": "#16A34A",
+          "warning": "#D97706"
+        }
+      },
+      {
+        "name": "card_white",
+        "kind": "solid",
+        "bg": "#FFFFFF",
+        "on_bg": "#0F172A",
+        "on_bg_muted": "#475569",
+        "roles": {
+          "border": "#E2E8F0",
+          "income_text": "#15803D",
+          "expense_text": "#B91C1C",
+          "transfer_text": "#1D4ED8",
+          "neutral_text": "#334155"
+        }
+      },
+      {
+        "name": "panel_subtle",
+        "kind": "solid",
+        "bg": "#F1F5F9",
+        "on_bg": "#0F172A",
+        "on_bg_muted": "#475569"
+      },
+      {
+        "name": "kpi_income_card",
+        "kind": "solid",
+        "bg": "#F0FDF4",
+        "on_bg": "#14532D",
+        "on_bg_muted": "#166534",
+        "roles": {
+          "badge_bg": "#DCFCE7",
+          "badge_text": "#15803D"
+        }
+      },
+      {
+        "name": "kpi_expense_card",
+        "kind": "solid",
+        "bg": "#FEF2F2",
+        "on_bg": "#7F1D1D",
+        "on_bg_muted": "#991B1B",
+        "roles": {
+          "badge_bg": "#FEE2E2",
+          "badge_text": "#B91C1C"
+        }
+      },
+      {
+        "name": "kpi_net_card",
+        "kind": "solid",
+        "bg": "#EFF6FF",
+        "on_bg": "#1E3A8A",
+        "on_bg_muted": "#1D4ED8",
+        "roles": {
+          "badge_bg": "#DBEAFE",
+          "badge_text": "#1E40AF"
+        }
+      },
+      {
+        "name": "sidebar_nav",
+        "kind": "solid",
+        "bg": "#FFFFFF",
+        "on_bg": "#0F172A",
+        "on_bg_muted": "#475569",
+        "roles": {
+          "active_bg": "#F1F5F9",
+          "active_text": "#0F172A",
+          "hover_bg": "#F8FAFC"
+        }
+      },
+      {
+        "name": "dropdown_and_modal",
+        "kind": "solid",
+        "bg": "#FFFFFF",
+        "on_bg": "#0F172A",
+        "on_bg_muted": "#475569"
+      },
+      {
+        "name": "badge_income",
+        "kind": "solid",
+        "bg": "#ECFDF5",
+        "on_bg": "#065F46",
+        "on_bg_muted": "#047857"
+      },
+      {
+        "name": "badge_expense",
+        "kind": "solid",
+        "bg": "#FFF1F2",
+        "on_bg": "#9F1239",
+        "on_bg_muted": "#BE123C"
+      },
+      {
+        "name": "badge_transfer",
+        "kind": "solid",
+        "bg": "#EFF6FF",
+        "on_bg": "#1E40AF",
+        "on_bg_muted": "#2563EB"
+      },
+      {
+        "name": "badge_to_verify",
+        "kind": "solid",
+        "bg": "#FEF3C7",
+        "on_bg": "#92400E",
+        "on_bg_muted": "#B45309"
+      }
+    ],
+    "accent": "#0F172A",
+    "on_accent": "#FFFFFF",
+    "chart_palette": [
+      "#10B981",
+      "#F43F5E",
+      "#3B82F6",
+      "#8B5CF6",
+      "#F59E0B",
+      "#06B6D4",
+      "#EC4899",
+      "#64748B",
+      "#14B8A6",
+      "#6366F1"
+    ]
+  },
+  "entry_surfaces": {
+    "/": "dashboard layout: sticky clean light top-bar/sidebar, large rounded white KPI cards grid, central visual analytics charts, and transaction/recurring split feeds"
+  },
+  "layout_and_grids": {
+    "app_shell": "Flex layout with responsive collapsible sidebar (or bottom nav on mobile / tabs) + top header filter bar with account selector, pocket/enveloppe selector, year selector, and 'Inclure les virements internes' toggle.",
+    "kpi_grid": "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6",
+    "dashboard_bento": "grid grid-cols-1 lg:grid-cols-12 gap-6 with left 8-cols for monthly trend chart + category breakdown donut, and right 4-cols for top categories and upcoming recurring items",
+    "card_styling": "bg-white rounded-2xl sm:rounded-3xl border border-slate-100/80 shadow-[0_4px_20px_-4px_rgba(15,23,42,0.05)] p-5 sm:p-6 transition-all duration-200 hover:shadow-[0_8px_30px_-4px_rgba(15,23,42,0.08)]",
+    "table_styling": "w-full border-collapse text-left rounded-xl overflow-hidden bg-white shadow-sm border border-slate-100"
+  },
+  "component_structure": {
+    "header_filters": {
+      "path": "frontend/src/components/HeaderFilters.tsx",
+      "description": "Global filter bar with Account select, Pocket/Enveloppe select, Year select (2024, 2025, 2026), and Switch 'Inclure les virements internes', + quick Add Transaction action."
+    },
+    "kpi_summary_cards": {
+      "path": "frontend/src/components/KpiSummaryCards.tsx",
+      "description": "4 large distinct cards: Solde total consolidé (with expandable per-account pill breakdown), Revenus de l'année, Dépenses de l'année, Solde net annuel + Ce mois-ci sub-stat."
+    },
+    "monthly_charts": {
+      "path": "frontend/src/components/MonthlyCharts.tsx",
+      "description": "Recharts interactive Bar + Line chart comparing monthly Revenus, Dépenses and Net with toggleable curves and custom clean Tooltip formatted in €."
+    },
+    "category_donut_and_top": {
+      "path": "frontend/src/components/CategoryDonutAndTop.tsx",
+      "description": "Donut chart with expense distribution and adjacent Top categories list (highlighting top 4 with progress bars and badges)."
+    },
+    "operations_table": {
+      "path": "frontend/src/components/OperationsTable.tsx",
+      "description": "Searchable, sortable, filterable operations view (search query, category filter, account filter, type filter, status filter) with bulk actions, CSV export/import, source badges (manuel/importé/récurrence), categorisation status (auto/manuelle/à vérifier), and add/edit/duplicate/delete dialogs."
+    },
+    "annual_analysis": {
+      "path": "frontend/src/components/AnnualAnalysis.tsx",
+      "description": "Page 'Le fil de l'année mois après mois' : summary cards, month-by-month bar chart, cumulative balance curve, category stacked bars, monthly detail table with deficit months highlighted in soft red, and previous year comparison metrics."
+    },
+    "savings_tracker": {
+      "path": "frontend/src/components/SavingsTracker.tsx",
+      "description": "Page Épargne : Real savings total, allocated vs unallocated amount, savings goals cards with progress bars and target dates, allocate/split/deallocate modal dialogs, and over-allocation alert badge."
+    },
+    "recurring_manager": {
+      "path": "frontend/src/components/RecurringManager.tsx",
+      "description": "Page Récurrences : List of regular bills and subscriptions with frequency, next execution date, amount, pause/stop toggles, and add/edit recurring modal."
+    },
+    "rules_engine": {
+      "path": "frontend/src/components/RulesEngine.tsx",
+      "description": "Page Règles : Ordered priority categorization rules with multiple conditions (contains, amount greater than, account equals), enable/disable toggle, drag/order reordering buttons, and 'Tester la règle' simulation sandbox."
+    },
+    "data_manager": {
+      "path": "frontend/src/components/DataManager.tsx",
+      "description": "Page Données : CSV Import wizard with automatic delimiter detection, column mapping (Date, Libellé, Montant, Compte, Catégorie), live preview table, duplicate detection, JSON full database export/import, and factory reset with safety confirmation dialog."
+    }
+  },
+  "indexeddb_architecture": {
+    "engine": "Local in-browser IndexedDB with idb / native wrapper (no remote backend needed for persistence, 100% private and offline)",
+    "initial_seed": "Automatic rich seed with realistic French personal finance data for 2025 & 2026 (Comptes: Compte Courant BNP, Livret A, Compte BoursoBank, Carte Débit; ~80+ categorized operations, 6 recurring items, 4 savings goals, 5 smart rules) so the app opens fully populated and vibrant on first load."
+  },
+  "motion": {
+    "card_entrance": "Fade-in with subtle translateY(6px), stagger duration 0.05s",
+    "chart_animations": "Smooth Recharts animationDuration={800} on mount and filter changes",
+    "micro_interactions": "hover:scale-[1.01] on cards, active:scale-[0.98] on buttons, smooth tab and accordion transitions",
+    "dialogs": "Smooth backdrop blur with scale-in animation"
+  },
+  "accessibility": {
+    "keyboard_navigation": "Full tab order across filters, buttons, dialogs, and table rows",
+    "aria_labels": "Explicit aria-label on all icon-only buttons, currency inputs, and filter toggles",
+    "contrast_compliance": "All text tokens strictly maintain >= 4.5:1 contrast against light cards and backgrounds",
+    "data_testids": "Strict implementation of data-testid attributes on all interactive elements"
+  },
+  "instructions_to_main_agent": [
+    "1. Keep all data local in browser via IndexedDB with pre-populated rich French dummy data so Tableau de bord, Opérations, Analyse annuelle, Épargne, Récurrences, and Règles look alive immediately.",
+    "2. Ensure the currency format is consistently French (€ at end: e.g. 1 250,50 € or +450,00 € / -32,90 €). Use Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).",
+    "3. Date format must be French (DD/MM/YYYY or DD MMM YYYY, e.g. '14 mars 2026').",
+    "4. Follow the Dribbble-inspired aesthetic 'Clair et doux': large rounded white cards (rounded-2xl / rounded-3xl), soft shadow (shadow-[0_4px_20px_-4px_rgba(15,23,42,0.05)]), subtle borders (border-slate-100), and pastel tinted KPI badges.",
+    "5. For Recharts: use responsive containers with clean custom tooltips with rounded-xl border and white background. Avoid cluttered axis lines, use strokeDasharray='3 3' on soft slate grids.",
+    "6. Include the 6 main tabs/pages in navigation: 'Tableau de bord', 'Opérations', 'Analyse annuelle', 'Épargne', 'Récurrences', 'Règles', 'Données'.",
+    "7. Include comprehensive data-testid attributes on all buttons, inputs, table rows, cards, and modal triggers (e.g. data-testid='kpi-revenus-card', data-testid='add-transaction-button', data-testid='filter-account-select', etc.)."
+  ]
+}
