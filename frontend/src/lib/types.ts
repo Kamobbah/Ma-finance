@@ -122,7 +122,8 @@ export interface Goal {
 
 export interface Budget {
   id: string;
-  category: string;
+  category: string; // "" = toutes les catégories (budget de compte)
+  accountId?: string; // budget limité à un compte / une Pocket
   amount: number; // plafond mensuel par défaut
   overrides: Record<string, number>; // "YYYY-MM" -> plafond spécifique
   rollover?: boolean; // reporter le reste positif sur le mois suivant

@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { AlertTriangle, CalendarRange, Forward, ChevronLeft, ChevronRight, MoreHorizontal, Pencil, Plus, SlidersHorizontal, Target, Trash2 } from "lucide-react";
+import { AlertTriangle, CalendarRange, Landmark, Forward, ChevronLeft, ChevronRight, MoreHorizontal, Pencil, Plus, SlidersHorizontal, Target, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Chip, ConfirmDialog, EmptyState, Field, NativeSelect, PageHeader, Panel, PanelTitle, ProgressBar, StatCard, inputCls } from "@/components/kit";
 import { deleteBudget, saveBudget, useData } from "@/lib/store";
-import { averageSpent, budgetLimit, budgetStatuses, effectiveLimit, LEVEL_STYLES, levelOf, shiftMonth, spentByCategory } from "@/lib/budgets";
+import { averageSpent, budgetLabel, budgetLimit, budgetSpent, budgetStatuses, effectiveLimit, LEVEL_STYLES, levelOf, scopeKey, shiftMonth } from "@/lib/budgets";
 import { Checkbox } from "@/components/ui/checkbox";
 import { catColor } from "@/lib/analytics";
 import { money, MONTHS, MONTHS_LONG, round2, todayIso, uid } from "@/lib/format";
@@ -18,27 +19,43 @@ import { cn } from "@/lib/utils";
 
 const mkLabel = (mk: string) => `${MONTHS_LONG[Number(mk.slice(5, 7)) - 1]} ${mk.slice(0, 4)}`;
 
-function NewBudgetDialog({ open, onClose, mk }: { open: boolean; onClose: () => void; mk: string }) {
+function NewBudgetDialog({ open, onClose, mk, presetAccount }: { open: boolean; onClose: () => void; mk: string; presetAccount?: string }) {
   const data = useData();
-  const available = data.categories.filter((c) => c.name !== INTERNAL_CATEGORY && !data.budgets.some((b) => b.category === c.name));
+  const accounts = data.accounts.filter((a) => a.currency === "EUR" && !a.archived);
+  const [scope, setScope] = useState<"category" | "account">("category");
+  const [accountId, setAccountId] = useState("");
   const [category, setCategory] = useState("");
   const [amount, setAmount] = useState("");
   const [rollover, setRollover] = useState(true);
+  const taken = new Set(data.budgets.map(scopeKey));
+  const cats = data.categories.filter((c) => c.name !== INTERNAL_CATEGORY);
+  const available = cats.filter((c) => !taken.has(`|${c.name}`));
   useEffect(() => {
     if (open) {
-      setCategory(available[0]?.name ?? "");
+      setScope(presetAccount ? "account" : "category");
+      setAccountId(presetAccount ?? accounts[0]?.id ?? "");
+      setCategory(presetAccount ? "" : (available[0]?.name ?? ""));
       setAmount("");
       setRollover(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-  const avg = category ? averageSpent(data, category, mk) : 0;
+  }, [open, presetAccount]);
+  const switchScope = (v: "category" | "account") => {
+    setScope(v);
+    setCategory(v === "account" ? "" : (available[0]?.name ?? ""));
+  };
+  const target = { category, accountId: scope === "account" ? accountId : undefined };
+  const duplicate = taken.has(scopeKey(target));
+  const valid = scope === "account" ? !!accountId : !!category;
+  const avg = valid ? averageSpent(data, target, mk) : 0;
   const submit = () => {
     const a = parseAmount(amount);
-    if (!category) return toast.error("Choisissez une catégorie");
+    if (scope === "category" && !category) return toast.error("Choisissez une catégorie");
+    if (scope === "account" && !accountId) return toast.error("Choisissez un compte");
+    if (duplicate) return toast.error("Un budget existe déjà pour ce périmètre");
     if (a === null || a <= 0) return toast.error("Indiquez un plafond positif");
-    saveBudget({ id: uid(), category, amount: round2(a), overrides: {}, rollover, startMonth: mk });
-    toast.success(`Budget « ${category} » créé`);
+    saveBudget({ id: uid(), category, accountId: target.accountId, amount: round2(a), overrides: {}, rollover, startMonth: mk });
+    toast.success(`Budget « ${budgetLabel(data, target)} » créé`);
     onClose();
   };
   return (
@@ -48,9 +65,34 @@ function NewBudgetDialog({ open, onClose, mk }: { open: boolean; onClose: () => 
           <DialogTitle className="text-xl font-bold">Nouveau budget mensuel</DialogTitle>
           <DialogDescription>Plafond appliqué chaque mois ; vous pourrez l'ajuster mois par mois.</DialogDescription>
         </DialogHeader>
-        <Field label="Catégorie">
-          <NativeSelect testid="budget-category-select" value={category} onChange={setCategory} options={available.map((c) => ({ value: c.name, label: c.name }))} className="w-full" />
+        <div className="grid grid-cols-2 gap-1.5 rounded-2xl bg-slate-100/80 p-1" role="radiogroup">
+          {(
+            [
+              ["category", "Par catégorie", "Tous comptes confondus"],
+              ["account", "Par compte", "Un compte ou une Pocket"],
+            ] as const
+          ).map(([v, l, h]) => (
+            <button key={v} type="button" role="radio" aria-checked={scope === v} data-testid={`budget-scope-${v}`} onClick={() => switchScope(v)} className={cn("rounded-xl px-3 py-2 text-left transition-[background-color,box-shadow] duration-200", scope === v ? "bg-white shadow-sm ring-1 ring-slate-200" : "hover:bg-white/60")}>
+              <span className="block text-xs font-bold text-slate-900">{l}</span>
+              <span className="block text-[11px] text-slate-500">{h}</span>
+            </button>
+          ))}
+        </div>
+        {scope === "account" && (
+          <Field label="Compte">
+            <NativeSelect testid="budget-account-select" value={accountId} onChange={setAccountId} options={accounts.map((a) => ({ value: a.id, label: a.name }))} className="w-full" />
+          </Field>
+        )}
+        <Field label={scope === "account" ? "Catégorie (facultative)" : "Catégorie"}>
+          <NativeSelect
+            testid="budget-category-select"
+            value={category}
+            onChange={setCategory}
+            options={scope === "account" ? [{ value: "", label: "Toutes les catégories" }, ...cats.map((c) => ({ value: c.name, label: c.name }))] : available.map((c) => ({ value: c.name, label: c.name }))}
+            className="w-full"
+          />
         </Field>
+        {duplicate && valid && <p data-testid="budget-duplicate-warning" className="-mt-1 text-xs text-amber-700">Un budget existe déjà pour ce périmètre.</p>}
         <Field label="Plafond mensuel (€)" hint={avg ? `Moyenne des 3 derniers mois : ${money(avg)}` : "Pas de dépense sur les 3 derniers mois"}>
           <Input data-testid="budget-amount-input" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={avg ? String(Math.ceil(avg)) : "200"} className={inputCls} />
         </Field>
@@ -70,7 +112,7 @@ function NewBudgetDialog({ open, onClose, mk }: { open: boolean; onClose: () => 
           <Button variant="outline" onClick={onClose}>
             Annuler
           </Button>
-          <Button data-testid="budget-save-button" onClick={submit}>
+          <Button data-testid="budget-save-button" disabled={duplicate} onClick={submit}>
             Créer le budget
           </Button>
         </DialogFooter>
@@ -80,6 +122,7 @@ function NewBudgetDialog({ open, onClose, mk }: { open: boolean; onClose: () => 
 }
 
 function LimitDialog({ target, onClose }: { target: { budget: Budget; mode: "default" | "month"; mk: string } | null; onClose: () => void }) {
+  const data = useData();
   const [amount, setAmount] = useState("");
   useEffect(() => {
     if (target) setAmount(String(target.mode === "default" ? target.budget.amount : budgetLimit(target.budget, target.mk)).replace(".", ","));
@@ -99,7 +142,7 @@ function LimitDialog({ target, onClose }: { target: { budget: Budget; mode: "def
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent data-testid="limit-dialog" className="rounded-3xl p-6 sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold">{mode === "default" ? `Plafond par défaut · ${budget.category}` : `${budget.category} · ${mkLabel(mk)}`}</DialogTitle>
+          <DialogTitle className="text-xl font-bold">{mode === "default" ? `Plafond par défaut · ${budgetLabel(data, budget)}` : `${budgetLabel(data, budget)} · ${mkLabel(mk)}`}</DialogTitle>
           <DialogDescription>{mode === "default" ? "S'applique à tous les mois sans ajustement spécifique." : `Plafond spécifique pour ce mois (par défaut : ${money(budget.amount)}).`}</DialogDescription>
         </DialogHeader>
         <Field label="Plafond (€)">
@@ -138,23 +181,31 @@ export default function Budgets() {
   const data = useData();
   const currentMk = todayIso().slice(0, 7);
   const [mk, setMk] = useState(currentMk);
-  const [newOpen, setNewOpen] = useState(false);
+  const [params, setParams] = useSearchParams();
+  const presetAccount = params.get("compte") ?? undefined;
+  const [newOpen, setNewOpen] = useState(!!presetAccount);
+  const [filter, setFilter] = useState<"all" | "category" | "account">("all");
   const [limitTarget, setLimitTarget] = useState<{ budget: Budget; mode: "default" | "month"; mk: string } | null>(null);
   const [toDelete, setToDelete] = useState<Budget | null>(null);
 
-  const statuses = useMemo(() => budgetStatuses(data, mk).sort((a, b) => b.ratio - a.ratio), [data, mk]);
+  const allStatuses = useMemo(() => budgetStatuses(data, mk).sort((a, b) => b.ratio - a.ratio), [data, mk]);
+  const statuses = allStatuses.filter((s) => filter === "all" || (filter === "account" ? !!s.budget.accountId : !s.budget.accountId));
+  const gridBudgets = data.budgets.filter((b) => filter === "all" || (filter === "account" ? !!b.accountId : !b.accountId));
+  const closeNew = () => {
+    setNewOpen(false);
+    if (presetAccount) setParams({}, { replace: true });
+  };
   const totalLimit = round2(statuses.reduce((s, x) => s + x.limit, 0));
   const totalSpent = round2(statuses.reduce((s, x) => s + x.spent, 0));
   const alerts = statuses.filter((s) => s.level !== "ok");
   const year = mk.slice(0, 4);
-  const yearSpent = useMemo(() => Array.from({ length: 12 }, (_, i) => spentByCategory(data, `${year}-${String(i + 1).padStart(2, "0")}`)), [data, year]);
 
   return (
     <div>
       <PageHeader
         eyebrow="Maîtriser ses dépenses"
         title="Budgets"
-        subtitle="Un plafond mensuel par catégorie, ajustable mois par mois, avec report automatique du reste non dépensé. Alerte orange à 80 %, rouge au dépassement. Les virements internes ne sont jamais comptés."
+        subtitle="Un plafond mensuel par catégorie ou par compte, ajustable mois par mois, avec report automatique du reste non dépensé. Alerte orange à 80 %, rouge au dépassement. Les virements internes ne sont jamais comptés."
         actions={
           <Button data-testid="new-budget-button" className="h-10 rounded-xl" onClick={() => setNewOpen(true)}>
             <Plus /> Nouveau budget
@@ -180,16 +231,35 @@ export default function Budgets() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard testid="budget-total-card" tone="net" label="Budget du mois" value={money(totalLimit)} sub={`${statuses.length} catégorie${statuses.length > 1 ? "s" : ""} budgétée${statuses.length > 1 ? "s" : ""}`} />
+        <StatCard testid="budget-total-card" tone="net" label="Budget du mois" value={money(totalLimit)} sub={`${statuses.length} budget${statuses.length > 1 ? "s" : ""}${filter === "all" ? "" : filter === "account" ? " de compte" : " de catégorie"}`} />
         <StatCard testid="budget-spent-card" tone="expense" label="Dépensé" value={money(totalSpent)} sub={totalLimit ? `${Math.round((totalSpent / totalLimit) * 100)} % du budget` : "—"} />
         <StatCard testid="budget-remaining-card" tone={totalLimit - totalSpent < 0 ? "expense" : "income"} label="Reste" value={money(totalLimit - totalSpent, "EUR", true)} />
         <StatCard testid="budget-alerts-card" tone={alerts.some((a) => a.level === "over") ? "expense" : alerts.length ? "savings" : "plain"} label="Alertes" value={String(alerts.length)} sub={`${alerts.filter((a) => a.level === "over").length} dépassé(s) · ${alerts.filter((a) => a.level === "warn").length} à plus de 80 %`} />
       </div>
 
       <Panel className="mt-5" testid="budgets-panel">
-        <PanelTitle sub="Triés du plus consommé au moins consommé">Budgets de {mkLabel(mk).toLowerCase()}</PanelTitle>
+        <PanelTitle
+          sub="Triés du plus consommé au moins consommé"
+          aside={
+            <div className="flex gap-1 rounded-2xl bg-slate-100/80 p-1">
+              {(
+                [
+                  ["all", "Tous"],
+                  ["category", "Catégories"],
+                  ["account", "Comptes"],
+                ] as const
+              ).map(([v, l]) => (
+                <button key={v} data-testid={`budget-filter-${v}`} onClick={() => setFilter(v)} className={cn("rounded-xl px-3 py-1.5 text-xs font-semibold transition-[background-color,color] duration-200", filter === v ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900")}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          }
+        >
+          Budgets de {mkLabel(mk).toLowerCase()}
+        </PanelTitle>
         {statuses.length === 0 ? (
-          <EmptyState testid="budgets-empty" icon={<Target className="size-5" />} title="Aucun budget" text="Fixez un plafond mensuel pour vos principales catégories (courses, restaurants, shopping…)." action={<Button onClick={() => setNewOpen(true)}>Créer un budget</Button>} />
+          <EmptyState testid="budgets-empty" icon={<Target className="size-5" />} title="Aucun budget" text="Fixez un plafond mensuel pour vos principales catégories (courses, restaurants…) ou pour un compte / une Pocket." action={<Button onClick={() => setNewOpen(true)}>Créer un budget</Button>} />
         ) : (
           <ul className="space-y-3">
             {statuses.map((s) => {
@@ -198,10 +268,15 @@ export default function Budgets() {
               return (
                 <li key={s.budget.id} data-testid="budget-row" data-level={s.level} className={cn("rounded-2xl border p-4 transition-colors", s.level === "over" ? "border-rose-200 bg-rose-50/40" : s.level === "warn" ? "border-amber-200 bg-amber-50/40" : "border-slate-100 bg-white")}>
                   <div className="flex flex-wrap items-center gap-3">
-                    <span className="size-3 rounded-full" style={{ background: catColor(data.categories, s.budget.category) }} />
+                    {s.budget.category ? <span className="size-3 rounded-full" style={{ background: catColor(data.categories, s.budget.category) }} /> : <Landmark className="size-4 text-slate-500" />}
                     <p data-testid="budget-category" className="font-semibold text-slate-900">
-                      {s.budget.category}
+                      {s.budget.category || data.accounts.find((a) => a.id === s.budget.accountId)?.name}
                     </p>
+                    {s.budget.accountId && (
+                      <Chip testid="budget-account-chip" className="bg-slate-100 text-slate-700 ring-slate-200">
+                        <Landmark className="size-3" /> {s.budget.category ? data.accounts.find((a) => a.id === s.budget.accountId)?.name : "Toutes catégories"}
+                      </Chip>
+                    )}
                     <Chip testid="budget-level" className={st.chip}>
                       {s.level !== "ok" && <AlertTriangle className="size-3" />} {st.label}
                     </Chip>
@@ -266,7 +341,7 @@ export default function Budgets() {
         )}
       </Panel>
 
-      {data.budgets.length > 0 && (
+      {gridBudgets.length > 0 && (
         <Panel className="mt-5 overflow-hidden p-0 sm:p-0" testid="budget-year-grid">
           <div className="p-5 pb-0 sm:p-6 sm:pb-0">
             <PanelTitle sub="Cliquez sur une case pour ajuster le plafond de ce mois">
@@ -279,7 +354,7 @@ export default function Budgets() {
             <table className="w-full min-w-[980px] text-xs">
               <thead>
                 <tr className="border-y border-slate-100 bg-slate-50/70 text-[10px] uppercase tracking-wider text-slate-500">
-                  <th className="px-5 py-2.5 text-left">Catégorie</th>
+                  <th className="px-5 py-2.5 text-left">Budget</th>
                   {MONTHS.map((m) => (
                     <th key={m} className="px-1 py-2.5 text-center">
                       {m}
@@ -288,19 +363,19 @@ export default function Budgets() {
                 </tr>
               </thead>
               <tbody>
-                {data.budgets.map((b) => (
+                {gridBudgets.map((b) => (
                   <tr key={b.id} className="border-b border-slate-50">
-                    <td className="whitespace-nowrap px-5 py-2 font-semibold text-slate-700">{b.category}</td>
+                    <td className="whitespace-nowrap px-5 py-2 font-semibold text-slate-700">{budgetLabel(data, b)}</td>
                     {MONTHS.map((_, i) => {
                       const k = `${year}-${String(i + 1).padStart(2, "0")}`;
                       const limit = effectiveLimit(data, b, k);
-                      const spent = round2(Math.max(0, yearSpent[i].get(b.category) ?? 0));
+                      const spent = budgetSpent(data, b, k);
                       const future = k > currentMk;
                       const lvl = levelOf(spent, limit);
                       return (
                         <td key={k} className="px-1 py-1.5">
                           <button
-                            data-testid={`budget-cell-${b.category}-${i}`}
+                            data-testid={`budget-cell-${b.id}-${i}`}
                             onClick={() => setLimitTarget({ budget: b, mode: "month", mk: k })}
                             className={cn(
                               "w-full rounded-lg px-1 py-1.5 text-center tabular transition-transform hover:scale-[1.04]",
@@ -323,13 +398,13 @@ export default function Budgets() {
         </Panel>
       )}
 
-      <NewBudgetDialog open={newOpen} onClose={() => setNewOpen(false)} mk={mk} />
+      <NewBudgetDialog open={newOpen} onClose={closeNew} mk={mk} presetAccount={presetAccount} />
       <LimitDialog target={limitTarget} onClose={() => setLimitTarget(null)} />
       <ConfirmDialog
         open={!!toDelete}
         onOpenChange={(o) => !o && setToDelete(null)}
         title="Supprimer ce budget ?"
-        description={`Le budget « ${toDelete?.category} » et ses ajustements mensuels seront supprimés. Vos opérations ne sont pas modifiées.`}
+        description={`Le budget « ${toDelete ? budgetLabel(data, toDelete) : ""} » et ses ajustements mensuels seront supprimés. Vos opérations ne sont pas modifiées.`}
         onConfirm={() => {
           if (toDelete) deleteBudget(toDelete.id);
           toast.success("Budget supprimé");

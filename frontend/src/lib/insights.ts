@@ -1,7 +1,7 @@
 import type { Account, AppData } from "./types";
 import { forecast } from "./recurrence";
 import { accountBalance, catColor, flow } from "./analytics";
-import { budgetStatuses, shiftMonth } from "./budgets";
+import { budgetLabel, budgetStatuses, shiftMonth } from "./budgets";
 import { fromIso, round2, todayIso, toIso } from "./format";
 
 /* ---------------- Rappels d'échéances ---------------- */
@@ -126,7 +126,7 @@ export function computeRecap(data: AppData, mk: string) {
     .slice(0, 3)
     .map(([name, value]) => ({ name, value: round2(value), color: catColor(data.categories, name) }));
 
-  const budgets = budgetStatuses(data, mk).map((s) => ({ category: s.budget.category, spent: s.spent, limit: s.limit, held: s.spent <= s.limit, ratio: s.ratio }));
+  const budgets = budgetStatuses(data, mk).map((s) => ({ category: budgetLabel(data, s.budget), spent: s.spent, limit: s.limit, held: s.spent <= s.limit, ratio: s.ratio }));
 
   const [y, m] = mk.split("-").map(Number);
   const firstDay = `${mk}-01`;

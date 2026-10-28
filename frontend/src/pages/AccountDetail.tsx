@@ -10,6 +10,7 @@ import { ACCOUNT_TYPE_LABELS, compact, fmtDate, money, MONTHS, round2, todayIso 
 import { yearOptions } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 import PocketGoalPanel from "@/components/PocketGoal";
+import AccountBudgets from "@/components/AccountBudgets";
 
 function FlowList({ title, sub, items, testid, empty }: { title: string; sub: string; items: { name: string; value: number; color: string; count: number }[]; testid: string; empty: string }) {
   const max = Math.max(1, ...items.map((i) => i.value));
@@ -144,6 +145,7 @@ export default function AccountDetail() {
       </div>
 
       {acc.type === "pocket" && <PocketGoalPanel acc={acc} />}
+      <AccountBudgets acc={acc} />
 
       {yearTx.length === 0 && series.length <= 2 ? (
         <Panel className="mt-5">
