@@ -49,9 +49,9 @@ function nextAmount(rec: Recurrence, s: SimState): number | null {
   if (rec.endMode === "amount" && rec.targetAmount) {
     const left = round2(rec.targetAmount - s.cumulated);
     if (left <= 0) return null;
-    return Math.min(rec.amount, left);
+    return Math.min(rec.amountOverrides?.[s.date] ?? rec.amount, left);
   }
-  return rec.amount;
+  return rec.amountOverrides?.[s.date] ?? rec.amount;
 }
 
 export function frequencyLabel(rec: Recurrence): string {
@@ -87,6 +87,10 @@ export function forecast(rec: Recurrence, from: string, to: string, limit = 500)
   const s: SimState = { date: rec.nextDate, occurrences: rec.occurrences, cumulated: rec.cumulated };
   let guard = 0;
   while (s.date <= to && guard++ < 5000 && out.length < limit) {
+    if (rec.skips?.includes(s.date)) {
+      s.date = advanceDate(rec, s.date);
+      continue;
+    }
     const amt = nextAmount(rec, s);
     if (amt === null) break;
     if (s.date >= from) {
@@ -102,44 +106,53 @@ export function forecast(rec: Recurrence, from: string, to: string, limit = 500)
   return out;
 }
 
-/** Crée les transactions dues/en retard et met à jour la récurrence. */
-export function processDue(rec: Recurrence, currency: string, today = todayIso()): { rec: Recurrence; created: Transaction[] } {
-  if (rec.status !== "active") return { rec, created: [] };
-  const created: Transaction[] = [];
+/** Enregistre la prochaine échéance (en sautant les échéances mises en pause). */
+export function postNext(rec: Recurrence, currency: string): { rec: Recurrence; created: Transaction[] } {
   const next = { ...rec };
-  let guard = 0;
-  while (next.nextDate <= today && guard++ < 2000) {
-    const amt = nextAmount(next, { date: next.nextDate, occurrences: next.occurrences, cumulated: next.cumulated });
-    if (amt === null) {
-      next.status = "ended";
-      break;
-    }
-    if (next.type === "transfer") {
-      const base = { date: next.nextDate, description: next.name, category: TRANSFER_CATEGORY, currency, note: next.note, internal: true, source: "recurring" as const, catStatus: "manual" as const, recurrenceId: next.id, createdAt: new Date().toISOString() };
-      created.push({ ...base, id: uid(), accountId: next.accountId, type: "transfer_out", amount: -amt, counterpartAccountId: next.toAccountId });
-      if (next.toAccountId) created.push({ ...base, id: uid(), accountId: next.toAccountId, type: "transfer_in", amount: amt, counterpartAccountId: next.accountId });
-    } else created.push({
-      id: uid(),
-      date: next.nextDate,
-      accountId: next.accountId,
-      description: next.name,
-      category: next.category,
-      type: next.type,
-      amount: next.type === "income" ? amt : -amt,
-      currency,
-      note: next.note,
-      internal: false,
-      source: "recurring",
-      catStatus: "manual",
-      recurrenceId: next.id,
-      createdAt: new Date().toISOString(),
-    });
-    next.occurrences++;
-    next.cumulated = round2(next.cumulated + amt);
-    next.nextDate = advanceDate(next, next.nextDate);
+  while (next.skips?.includes(next.nextDate)) next.nextDate = advanceDate(next, next.nextDate);
+  const amt = nextAmount(next, { date: next.nextDate, occurrences: next.occurrences, cumulated: next.cumulated });
+  if (amt === null) return { rec: { ...next, status: "ended" }, created: [] };
+  const created: Transaction[] = [];
+  const base = { date: next.nextDate, description: next.name, currency, note: next.note, source: "recurring" as const, catStatus: "manual" as const, recurrenceId: next.id, createdAt: new Date().toISOString() };
+  if (next.type === "transfer") {
+    created.push({ ...base, id: uid(), category: TRANSFER_CATEGORY, internal: true, accountId: next.accountId, type: "transfer_out", amount: -amt, counterpartAccountId: next.toAccountId });
+    if (next.toAccountId) created.push({ ...base, id: uid(), category: TRANSFER_CATEGORY, internal: true, accountId: next.toAccountId, type: "transfer_in", amount: amt, counterpartAccountId: next.accountId });
+  } else created.push({ ...base, id: uid(), category: next.category, internal: false, accountId: next.accountId, type: next.type, amount: next.type === "income" ? amt : -amt });
+  next.occurrences++;
+  next.cumulated = round2(next.cumulated + amt);
+  if (next.amountOverrides?.[next.nextDate] !== undefined) {
+    const o = { ...next.amountOverrides };
+    delete o[next.nextDate];
+    next.amountOverrides = o;
   }
-  if (next.status === "active" && nextAmount(next, { date: next.nextDate, occurrences: next.occurrences, cumulated: next.cumulated }) === null) {
-    next.status = "ended";
-  }
+  next.nextDate = advanceDate(next, next.nextDate);
+  while (next.skips?.includes(next.nextDate)) next.nextDate = advanceDate(next, next.nextDate);
+  if (nextAmount(next, { date: next.nextDate, occurrences: next.occurrences, cumulated: next.cumulated }) === null) next.status = "ended";
   return { rec: next, created };
+}
+
+/** Crée les transactions dues et met à jour la récurrence (sauf validation manuelle). */
+export function processDue(rec: Recurrence, currency: string, today = todayIso()): { rec: Recurrence; created: Transaction[] } {
+  if (rec.status !== "active" || rec.manual) return { rec, created: [] };
+  let cur = rec;
+  const created: Transaction[] = [];
+  let guard = 0;
+  while (cur.status === "active" && cur.nextDate <= today && guard++ < 2000) {
+    const r = postNext(cur, currency);
+    cur = r.rec;
+    created.push(...r.created);
+  }
+  return { rec: cur, created };
+}
+
+export type RecPeriodStatus = "paid" | "upcoming" | "late" | "paused" | "ended";
+
+/** Statut du mois en cours : payée, à venir, en retard (validation manuelle non faite). */
+export function recPeriodStatus(rec: Recurrence, txs: Transaction[], today = todayIso()): RecPeriodStatus {
+  if (rec.status === "ended") return "ended";
+  if (rec.status === "paused") return "paused";
+  if (rec.nextDate < today) return "late";
+  const mk = today.slice(0, 7);
+  if (txs.some((t) => t.recurrenceId === rec.id && t.date.startsWith(mk))) return "paid";
+  return "upcoming";
 }

@@ -1,12 +1,13 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useState } from "react";
-import { LayoutDashboard, ListOrdered, LineChart, PiggyBank, Repeat, Wand2, Database, Plus, Menu, ShieldCheck, Target, WalletCards, CalendarRange } from "lucide-react";
+import { LayoutDashboard, ListOrdered, LineChart, PiggyBank, Repeat, Wand2, Database, Plus, Menu, ShieldCheck, Target, WalletCards, CalendarRange, Waves } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import TransactionDialog from "./TransactionDialog";
 import RemindersBar from "./RemindersBar";
 import BudgetPrepBanner from "./BudgetPrepBanner";
+import TopBar from "./TopBar";
 import MonthlyRecapDialog from "./MonthlyRecapDialog";
 import { openTxDialog } from "@/lib/ui";
 import { useData, useLastSaved } from "@/lib/store";
@@ -17,6 +18,7 @@ export const NAV = [
   { to: "/", label: "Tableau de bord", icon: LayoutDashboard, id: "dashboard" },
   { to: "/operations", label: "Opérations", icon: ListOrdered, id: "operations" },
   { to: "/comptes", label: "Comptes & Pockets", icon: WalletCards, id: "comptes" },
+  { to: "/tresorerie", label: "Trésorerie", icon: Waves, id: "tresorerie" },
   { to: "/analyse", label: "Analyse annuelle", icon: LineChart, id: "analyse" },
   { to: "/bilan", label: "Bilan annuel", icon: CalendarRange, id: "bilan" },
   { to: "/budgets", label: "Budgets", icon: Target, id: "budgets" },
@@ -125,6 +127,7 @@ export default function AppShell() {
 
       <main className="lg:pl-64">
         <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
+          <TopBar />
           <RemindersBar />
           <BudgetPrepBanner />
           <Outlet />

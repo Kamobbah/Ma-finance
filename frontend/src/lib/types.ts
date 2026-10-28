@@ -39,6 +39,51 @@ export interface Transaction {
   ruleId?: string;
   recurrenceId?: string;
   createdAt: string;
+  tags?: string[];
+  attachments?: Attachment[];
+  importId?: string; // lot d'import d'origine
+  balance?: number; // solde indiqué par le relevé après l'opération
+}
+
+export interface Attachment {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  dataUrl: string;
+}
+
+export interface ImportBatch {
+  id: string;
+  fileName: string;
+  at: string;
+  format: "revolut" | "csv" | "xlsx";
+  added: number;
+  duplicates: number;
+  errors: number;
+  review: number;
+  accountIds: string[];
+  status: "active" | "cancelled";
+  reconciliation: { accountId: string; statement: number; computed: number; diff: number; firstMismatch?: string }[];
+}
+
+export interface TrashItem {
+  id: string;
+  kind: "transaction" | "goal" | "recurrence" | "budget";
+  label: string;
+  deletedAt: string;
+  item: Transaction | Goal | Recurrence | Budget;
+}
+
+export interface SavedFilter {
+  id: string;
+  name: string;
+  query: string;
+  account?: string;
+  category?: string;
+  year?: string;
+  tag?: string;
+  kind?: string;
 }
 
 export interface Category {
@@ -65,6 +110,7 @@ export interface Rule {
   conditions: RuleCondition[];
   category: string;
   setType?: TxType;
+  match?: "all" | "any"; // toutes les conditions (ET, défaut) ou au moins une (OU)
 }
 
 export type Frequency = "daily" | "weekly" | "monthly" | "yearly" | "custom";
@@ -92,15 +138,19 @@ export interface Recurrence {
   note?: string;
   occurrences: number;
   cumulated: number;
+  manual?: boolean; // validation manuelle : pas de création automatique, l'échéance passe « en retard » si non validée
+  skips?: string[]; // dates d'échéance sautées (pause d'un mois)
+  amountOverrides?: Record<string, number>; // montant exceptionnel pour une échéance donnée
 }
 
 export type GoalStatus = "active" | "reached" | "paused" | "abandoned" | "archived";
-export type GoalKind = "target" | "open" | "monthly";
+export type GoalKind = "target" | "open" | "monthly" | "debt";
 export type GoalPriority = "essential" | "important" | "bonus";
 
 export interface GoalMove {
   date: string;
   amount: number; // + allocation, - désallocation
+  source?: string; // compte / Pocket d'où vient l'argent
 }
 
 export interface Goal {
@@ -116,6 +166,8 @@ export interface Goal {
   monthly?: number; // versement mensuel prévu (€)
   minimum?: number; // montant minimum souhaité (objectifs sans cible)
   priority?: GoalPriority; // défaut "important"
+  accountId?: string; // compte / Pocket lié
+  archivedAt?: string;
   reachedAck?: boolean; // objectif atteint : l'utilisateur a choisi de conserver les fonds
   history: GoalMove[];
   createdAt: string;
@@ -142,6 +194,11 @@ export interface AppData {
   rules: Rule[];
   recurrences: Recurrence[];
   goals: Goal[];
+  imports?: ImportBatch[];
+  trash?: TrashItem[];
+  savedFilters?: SavedFilter[];
+  tags?: string[]; // étiquettes globales
+  rulesVersion?: number;
 }
 
 export interface Prefs {
@@ -150,7 +207,14 @@ export interface Prefs {
   includeInternal: boolean;
   lastRecapSeen?: string; // "YYYY-MM" du dernier bilan affiché
   dismissedReminders?: string[];
-  autoBudgetPrep?: boolean; // préparation auto des budgets du mois suivant (défaut : activée)
+  autoBudgetPrep?: boolean;
+  cashScope?: string; // périmètre de la trésorerie prévisionnelle
+  cashVariable?: Record<string, number>; // dépenses variables mensuelles saisies, par périmètre
+  cashIncludeVariable?: boolean;
+  cashGoalSavings?: boolean;
+  theme?: "light" | "dark";
+  density?: "comfortable" | "compact";
+  lastExportReminder?: string; // préparation auto des budgets du mois suivant (défaut : activée)
   budgetPrep?: Record<string, BudgetPrep>; // clé : mois préparé "YYYY-MM"
 }
 

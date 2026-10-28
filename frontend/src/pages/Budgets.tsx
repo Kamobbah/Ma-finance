@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
+import { toastUndo } from "@/lib/undo";
 import { AlertTriangle, CalendarRange, CopyPlus, Landmark, Forward, ChevronLeft, ChevronRight, MoreHorizontal, Pencil, Plus, SlidersHorizontal, Target, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -8,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Chip, ConfirmDialog, EmptyState, Field, NativeSelect, PageHeader, Panel, PanelTitle, ProgressBar, StatCard, inputCls } from "@/components/kit";
 import { deleteBudget, saveBudget, setPrefs, useData, usePrefs } from "@/lib/store";
-import { averageSpent, budgetLabel, budgetLimit, budgetSpent, budgetStatuses, effectiveLimit, LEVEL_STYLES, levelOf, scopeKey, shiftMonth } from "@/lib/budgets";
+import { upcomingInBudget, averageSpent, budgetLabel, budgetLimit, budgetSpent, budgetStatuses, effectiveLimit, LEVEL_STYLES, levelOf, scopeKey, shiftMonth } from "@/lib/budgets";
 import { Checkbox } from "@/components/ui/checkbox";
 import { catColor } from "@/lib/analytics";
 import { money, MONTHS, MONTHS_LONG, round2, todayIso, uid } from "@/lib/format";
@@ -291,7 +292,7 @@ export default function Budgets() {
       <PageHeader
         eyebrow="Maîtriser ses dépenses"
         title="Budgets"
-        subtitle="Un plafond mensuel par catégorie ou par compte, ajustable mois par mois, avec report automatique du reste non dépensé. Alerte orange à 80 %, rouge au dépassement. Les virements internes ne sont jamais comptés."
+        subtitle="Un plafond mensuel par catégorie ou par compte, ajustable mois par mois, avec report automatique du reste non dépensé. Alerte orange au-delà de 75 %, rouge au dépassement. Les virements internes ne sont jamais comptés."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" data-testid="copy-next-button" className="h-10 rounded-xl" disabled={!data.budgets.length} onClick={() => setCopyOpen(true)}>
@@ -333,7 +334,7 @@ export default function Budgets() {
         <StatCard testid="budget-total-card" tone="net" label="Budget du mois" value={money(totalLimit)} sub={`${statuses.length} budget${statuses.length > 1 ? "s" : ""}${filter === "all" ? "" : filter === "account" ? " de compte" : " de catégorie"}`} />
         <StatCard testid="budget-spent-card" tone="expense" label="Dépensé" value={money(totalSpent)} sub={totalLimit ? `${Math.round((totalSpent / totalLimit) * 100)} % du budget` : "—"} />
         <StatCard testid="budget-remaining-card" tone={totalLimit - totalSpent < 0 ? "expense" : "income"} label="Reste" value={money(totalLimit - totalSpent, "EUR", true)} />
-        <StatCard testid="budget-alerts-card" tone={alerts.some((a) => a.level === "over") ? "expense" : alerts.length ? "savings" : "plain"} label="Alertes" value={String(alerts.length)} sub={`${alerts.filter((a) => a.level === "over").length} dépassé(s) · ${alerts.filter((a) => a.level === "warn").length} à plus de 80 %`} />
+        <StatCard testid="budget-alerts-card" tone={alerts.some((a) => a.level === "over") ? "expense" : alerts.length ? "savings" : "plain"} label="Alertes" value={String(alerts.length)} sub={`${alerts.filter((a) => a.level === "over").length} dépassé(s) · ${alerts.filter((a) => a.level === "warn").length} à plus de 75 %`} />
       </div>
 
       <Panel className="mt-5" testid="budgets-panel">
@@ -433,6 +434,16 @@ export default function Budgets() {
                       {s.remaining >= 0 ? `Reste ${money(s.remaining)}` : `Dépassement de ${money(-s.remaining)}`}
                     </span>
                   </div>
+                  {(() => {
+                    const up = upcomingInBudget(data, s.budget, mk);
+                    if (!up.count) return null;
+                    const after = round2(s.remaining - up.total);
+                    return (
+                      <p data-testid="budget-upcoming" className={cn("mt-1.5 rounded-xl px-2.5 py-1.5 text-[11px]", after < 0 ? "bg-rose-50 text-rose-800" : "bg-slate-50 text-slate-600")}>
+                        À venir ce mois : {up.count} échéance{up.count > 1 ? "s" : ""} récurrente{up.count > 1 ? "s" : ""} · {money(up.total)} → reste après échéances {money(after)}
+                      </p>
+                    );
+                  })()}
                 </li>
               );
             })}
@@ -507,7 +518,7 @@ export default function Budgets() {
         description={`Le budget « ${toDelete ? budgetLabel(data, toDelete) : ""} » et ses ajustements mensuels seront supprimés. Vos opérations ne sont pas modifiées.`}
         onConfirm={() => {
           if (toDelete) deleteBudget(toDelete.id);
-          toast.success("Budget supprimé");
+          toastUndo("Budget supprimé");
         }}
       />
     </div>

@@ -1,6 +1,7 @@
 import type { AppData, Budget, Transaction } from "./types";
 import { flow } from "./analytics";
 import { round2, todayIso } from "./format";
+import { forecast } from "./recurrence";
 
 export type BudgetLevel = "ok" | "warn" | "over";
 
@@ -54,6 +55,26 @@ export function budgetSpent(data: AppData, b: BudgetScope, mk: string): number {
   return round2(Math.max(0, spentIndex(data, mk).get(`${b.accountId ?? ""}|${b.category}`) ?? 0));
 }
 
+/** Dépenses récurrentes encore prévues d'ici la fin du mois sur le périmètre d'un budget. */
+export function upcomingInBudget(data: AppData, b: BudgetScope, mk: string, today = todayIso()) {
+  const [y, m] = mk.split("-").map(Number);
+  const end = `${mk}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
+  const from = today > `${mk}-01` ? today : `${mk}-01`;
+  if (from > end) return { total: 0, count: 0 };
+  let total = 0;
+  let count = 0;
+  for (const r of data.recurrences) {
+    if (r.type !== "expense") continue;
+    for (const o of forecast(r, from, end, 40)) {
+      if (b.accountId && o.accountId !== b.accountId) continue;
+      if (b.category && o.category !== b.category) continue;
+      total += -o.amount;
+      count++;
+    }
+  }
+  return { total: round2(total), count };
+}
+
 export const scopeKey = (b: BudgetScope) => `${b.accountId ?? ""}|${b.category}`;
 
 /** Libellé lisible : « Courses », « Courses · Madré », « Madré · toutes catégories ». */
@@ -92,7 +113,7 @@ export function effectiveLimit(data: AppData, b: Budget, mk: string): number {
 export function levelOf(spent: number, limit: number): BudgetLevel {
   if (limit <= 0) return spent > 0 ? "over" : "ok";
   const r = spent / limit;
-  return r > 1 ? "over" : r >= 0.8 ? "warn" : "ok";
+  return r > 1 ? "over" : r > 0.75 ? "warn" : "ok";
 }
 
 export interface BudgetStatus {

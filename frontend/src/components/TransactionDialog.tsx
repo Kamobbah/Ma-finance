@@ -8,13 +8,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, NativeSelect, inputCls } from "@/components/kit";
 import { closeTxDialog, accountOptions, categoryOptions, useTxDialog } from "@/lib/ui";
-import { saveTransaction, useData, addTransactions, getData } from "@/lib/store";
+import { saveTransaction, useData, addTransactions, getData, addTag } from "@/lib/store";
+import { AttachmentEditor, TagEditor } from "@/components/TxExtras";
 import { budgetLabel, budgetStatuses } from "@/lib/budgets";
 import { MAIN_ID } from "@/lib/revolut";
 import { parseAmount } from "@/lib/csv";
 import { money, todayIso, TYPE_LABELS, uid } from "@/lib/format";
 import { INTERNAL_CATEGORY } from "@/lib/rules";
-import type { Transaction, TxType } from "@/lib/types";
+import type { Attachment, Transaction, TxType } from "@/lib/types";
 
 const AUTO = "__auto__";
 
@@ -41,6 +42,8 @@ export default function TransactionDialog() {
   const [internal, setInternal] = useState(false);
   const [counterpart, setCounterpart] = useState("");
   const [mirror, setMirror] = useState(true);
+  const [tags, setTags] = useState<string[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -57,6 +60,8 @@ export default function TransactionDialog() {
     setInternal(tx?.internal ?? false);
     setCounterpart(tx?.counterpartAccountId ?? "");
     setMirror(!tx);
+    setTags(tx?.tags ?? []);
+    setAttachments(tx?.attachments ?? []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, tx]);
 
@@ -69,6 +74,9 @@ export default function TransactionDialog() {
     if (!accountId) return toast.error("Choisissez un compte.");
     const isAuto = category === AUTO;
     const base: Transaction = {
+      ...(editing ? tx! : {}),
+      tags: tags.length ? tags : undefined,
+      attachments: attachments.length ? attachments : undefined,
       id: editing ? tx!.id : uid(),
       date,
       accountId,
@@ -89,6 +97,7 @@ export default function TransactionDialog() {
       base.category = INTERNAL_CATEGORY;
       base.catStatus = "auto";
     }
+    tags.forEach(addTag);
     saveTransaction(base, isAuto && !base.internal);
     if (!editing && base.internal && counterpart && mirror) {
       const accName = data.accounts.find((a) => a.id === accountId)?.name ?? "";
@@ -205,6 +214,12 @@ export default function TransactionDialog() {
           </div>
           <Field label="Note (facultative)" className="sm:col-span-2">
             <Textarea data-testid="tx-note-input" value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="rounded-xl" />
+          </Field>
+          <Field label="Étiquettes" className="sm:col-span-2">
+            <TagEditor value={tags} onChange={setTags} known={data.tags ?? []} />
+          </Field>
+          <Field label="Pièces jointes" className="sm:col-span-2">
+            <AttachmentEditor value={attachments} onChange={setAttachments} />
           </Field>
         </div>
         <DialogFooter className="-mx-6 -mb-6 rounded-b-3xl px-6">

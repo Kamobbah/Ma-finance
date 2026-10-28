@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Chip, ConfirmDialog, Field, NativeSelect, PageHeader, Panel, PanelTitle, inputCls } from "@/components/kit";
 import CsvImportDialog from "@/components/CsvImportDialog";
+import { BackupsPanel, GoalsExportButtons, ImportHistoryPanel, TrashPanel } from "@/components/DataExtras";
 import { transactionsToCsv } from "./Operations";
 import { addCategory, clearAll, deleteAccount, replaceAll, resetToSeed, saveAccount, useData, usePrefs } from "@/lib/store";
 import { accountBalance, scopedTx, scopeLabel } from "@/lib/analytics";
@@ -170,8 +171,15 @@ export default function DataPage() {
                 </span>
               </span>
             </button>
+            <GoalsExportButtons />
           </div>
         </Panel>
+      </div>
+
+      <ImportHistoryPanel />
+      <div className="grid grid-cols-1 gap-x-5 lg:grid-cols-2">
+        <TrashPanel />
+        <BackupsPanel />
       </div>
 
       <Panel className="mt-5 overflow-hidden" testid="accounts-panel">

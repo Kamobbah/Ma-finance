@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import TodayOverview from "@/components/TodayOverview";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowDownRight, ArrowUpRight, CalendarClock, Landmark, Pause, Pencil, Scale, Square, Wallet } from "lucide-react";
 import { Bar, CartesianGrid, Cell, ComposedChart, Legend, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -69,6 +70,7 @@ export default function Dashboard() {
         </div>
         <p className="text-sm text-slate-500">{new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
       </div>
+      <TodayOverview />
       <GlobalFilters />
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12 xl:gap-5">

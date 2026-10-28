@@ -169,7 +169,16 @@ function RuleDialog({ open, rule, onClose }: { open: boolean; rule: Rule | null;
           <Input data-testid="rule-name-input" value={r.name} onChange={(e) => setR({ ...r, name: e.target.value })} className={inputCls} />
         </Field>
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-slate-600">Conditions</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-slate-600">Conditions</p>
+            <div className="flex gap-1 rounded-xl bg-slate-100 p-0.5 text-[11px] font-semibold">
+              {(["all", "any"] as const).map((m) => (
+                <button key={m} type="button" data-testid={`rule-match-${m}`} onClick={() => setR({ ...r, match: m })} className={(r.match ?? "all") === m ? "rounded-lg bg-white px-2.5 py-1 text-slate-900 shadow-sm" : "px-2.5 py-1 text-slate-500"}>
+                  {m === "all" ? "Toutes (ET)" : "Au moins une (OU)"}
+                </button>
+              ))}
+            </div>
+          </div>
           {r.conditions.map((c, i) => (
             <ConditionEditor key={c.id} idx={i} c={c} onChange={(nc) => setR({ ...r, conditions: r.conditions.map((x) => (x.id === c.id ? nc : x)) })} onRemove={() => setR({ ...r, conditions: r.conditions.filter((x) => x.id !== c.id) })} />
           ))}

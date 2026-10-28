@@ -1,17 +1,19 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeftRight, ArrowRight, CalendarClock, MoreHorizontal, Pause, Pencil, Play, Plus, Repeat, Square, Trash2 } from "lucide-react";
+import { toastUndo } from "@/lib/undo";
+import { ArrowLeftRight, ArrowRight, CalendarClock, CheckCheck, Coins, MoreHorizontal, Pause, Pencil, Play, Plus, Repeat, SkipForward, Square, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Amount, Chip, ConfirmDialog, EmptyState, Field, NativeSelect, PageHeader, Panel, StatCard, inputCls } from "@/components/kit";
-import { deleteRecurrence, saveRecurrence, useData } from "@/lib/store";
+import { checkpoint, deleteRecurrence, postRecurrence, saveRecurrence, useData } from "@/lib/store";
+import { Checkbox } from "@/components/ui/checkbox";
 import { accountOptions, categoryOptions } from "@/lib/ui";
 import { INTERNAL_CATEGORY } from "@/lib/rules";
-import { forecast, frequencyLabel } from "@/lib/recurrence";
+import { advanceDate, forecast, frequencyLabel, recPeriodStatus, type RecPeriodStatus } from "@/lib/recurrence";
 import { fmtDate, money, round2, todayIso, uid } from "@/lib/format";
 import { parseAmount } from "@/lib/csv";
 import SubscriptionFinder from "@/components/SubscriptionFinder";
@@ -203,6 +205,13 @@ function RecurrenceDialog({ open, rec, onClose }: { open: boolean; rec: Recurren
               <NativeSelect testid="rec-status-select" value={f.status} onChange={(v) => set({ status: v as RecurrenceStatus })} options={(Object.keys(STATUS) as RecurrenceStatus[]).map((k) => ({ value: k, label: STATUS[k].label }))} />
             </Field>
           )}
+          <label className="col-span-2 flex items-start gap-2.5 rounded-2xl bg-slate-50 p-3 text-sm text-slate-700">
+            <Checkbox data-testid="rec-manual-checkbox" checked={!!f.manual} onCheckedChange={(c) => set({ manual: !!c })} className="mt-0.5" />
+            <span>
+              <b className="font-semibold">Validation manuelle</b>
+              <span className="block text-xs text-slate-500">L'opération n'est pas créée automatiquement : l'échéance passe « en retard » tant que vous ne la marquez pas payée (utile si l'opération réelle arrive par import).</span>
+            </span>
+          </label>
           <Field label="Note (facultative)" className="col-span-2">
             <Textarea data-testid="rec-note-input" rows={2} value={f.note ?? ""} onChange={(e) => set({ note: e.target.value })} className="rounded-xl" />
           </Field>
@@ -218,6 +227,22 @@ function RecurrenceDialog({ open, rec, onClose }: { open: boolean; rec: Recurren
       </DialogContent>
     </Dialog>
   );
+}
+
+const PERIOD: Record<RecPeriodStatus, { label: string; cls: string } | null> = {
+  paid: { label: "Payée ce mois", cls: "bg-emerald-50 text-emerald-800 ring-emerald-200" },
+  upcoming: { label: "À venir", cls: "bg-blue-50 text-blue-800 ring-blue-200" },
+  late: { label: "En retard", cls: "bg-rose-50 text-rose-800 ring-rose-200" },
+  paused: null,
+  ended: null,
+};
+function PeriodChip({ s }: { s: RecPeriodStatus }) {
+  const p = PERIOD[s];
+  return p ? (
+    <Chip testid="recurrence-period-status" className={p.cls}>
+      {p.label}
+    </Chip>
+  ) : null;
 }
 
 export default function Recurrences() {
@@ -252,6 +277,29 @@ export default function Recurrences() {
       }, 0),
   );
 
+  const [override, setOverride] = useState<{ rec: Recurrence; value: string } | null>(null);
+  const skip = (r: Recurrence) => {
+    checkpoint("Saut d'échéance");
+    saveRecurrence({ ...r, skips: [...(r.skips ?? []), r.nextDate], nextDate: advanceDate(r, r.nextDate) });
+    toastUndo(`Échéance du ${fmtDate(r.nextDate)} sautée`, `Prochaine : ${fmtDate(advanceDate(r, r.nextDate))}`);
+  };
+  const pay = (r: Recurrence) => {
+    checkpoint("Validation d'échéance");
+    const n = postRecurrence(r.id);
+    if (n) toastUndo(`Échéance du ${fmtDate(r.nextDate)} enregistrée`, `${n} opération${n > 1 ? "s" : ""} créée${n > 1 ? "s" : ""}`);
+  };
+  const saveOverride = () => {
+    if (!override) return;
+    const r = override.rec;
+    const v = override.value.trim() === "" ? null : parseAmount(override.value);
+    if (v !== null && v <= 0) return toast.error("Indiquez un montant positif");
+    const o = { ...(r.amountOverrides ?? {}) };
+    if (v === null) delete o[r.nextDate];
+    else o[r.nextDate] = round2(v);
+    saveRecurrence({ ...r, amountOverrides: o });
+    toast.success(v === null ? "Montant habituel rétabli" : `Montant exceptionnel de ${money(v)} le ${fmtDate(r.nextDate)}`);
+    setOverride(null);
+  };
   const toggle = (r: Recurrence) => {
     saveRecurrence({ ...r, status: r.status === "active" ? "paused" : "active" });
     toast.success(r.status === "active" ? "Récurrence mise en pause" : "Récurrence réactivée");
@@ -319,9 +367,13 @@ export default function Recurrences() {
                       {r.status === "ended" ? (
                         <span className="text-slate-400">—</span>
                       ) : (
-                        <span className="flex items-center gap-1.5 text-slate-700">
-                          <CalendarClock className="size-3.5 text-slate-400" /> {fmtDate(r.nextDate)}
-                        </span>
+                        <div className="space-y-1">
+                          <span className="flex items-center gap-1.5 text-slate-700">
+                            <CalendarClock className="size-3.5 text-slate-400" /> {fmtDate(r.nextDate)}
+                          </span>
+                          <PeriodChip s={recPeriodStatus(r, data.transactions)} />
+                          {r.amountOverrides?.[r.nextDate] !== undefined && <span className="block text-[11px] font-medium text-amber-700" data-testid="recurrence-override">Exceptionnel : {money(r.amountOverrides[r.nextDate])}</span>}
+                        </div>
                       )}
                     </td>
                     <td className="px-3 py-3 text-xs text-slate-500">{endLabel(r)}</td>
@@ -331,6 +383,9 @@ export default function Recurrences() {
                       ) : (
                         <Amount value={r.type === "income" ? r.amount : -r.amount} />
                       )}
+                      <span className="block text-[11px] text-slate-400 tabular" data-testid="recurrence-cumulated">
+                        Cumul {money(r.cumulated)} · {r.occurrences}×
+                      </span>
                     </td>
                     <td className="px-3 py-3">
                       <Chip testid="recurrence-status" className={STATUS[r.status].cls}>
@@ -346,6 +401,19 @@ export default function Recurrences() {
                           <DropdownMenuItem data-testid="recurrence-edit" onClick={() => setDialog({ open: true, rec: r })}>
                             <Pencil /> Modifier
                           </DropdownMenuItem>
+                          {r.status === "active" && (
+                            <>
+                              <DropdownMenuItem data-testid="recurrence-pay" onClick={() => pay(r)}>
+                                <CheckCheck /> {r.nextDate < todayIso() ? "Rattraper l'échéance en retard" : "Marquer la prochaine payée"}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem data-testid="recurrence-skip" onClick={() => skip(r)}>
+                                <SkipForward /> Sauter la prochaine échéance
+                              </DropdownMenuItem>
+                              <DropdownMenuItem data-testid="recurrence-override-open" onClick={() => setOverride({ rec: r, value: r.amountOverrides?.[r.nextDate] !== undefined ? String(r.amountOverrides[r.nextDate]).replace(".", ",") : "" })}>
+                                <Coins /> Montant exceptionnel…
+                              </DropdownMenuItem>
+                            </>
+                          )}
                           {r.status !== "ended" && (
                             <DropdownMenuItem data-testid="recurrence-toggle" onClick={() => toggle(r)}>
                               {r.status === "active" ? <Pause /> : <Play />} {r.status === "active" ? "Mettre en pause" : "Réactiver"}
@@ -383,6 +451,25 @@ export default function Recurrences() {
           toast.success("Récurrence arrêtée");
         }}
       />
+      <Dialog open={!!override} onOpenChange={(o) => !o && setOverride(null)}>
+        <DialogContent data-testid="override-dialog" className="rounded-3xl p-6 sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold">Montant exceptionnel</DialogTitle>
+            <DialogDescription>
+              Pour l'échéance du {override ? fmtDate(override.rec.nextDate) : ""} uniquement (habituel : {money(override?.rec.amount ?? 0)}). Laissez vide pour revenir au montant habituel.
+            </DialogDescription>
+          </DialogHeader>
+          <Input data-testid="override-amount-input" inputMode="decimal" value={override?.value ?? ""} onChange={(e) => override && setOverride({ ...override, value: e.target.value })} className={inputCls} autoFocus />
+          <DialogFooter className="-mx-6 -mb-6 rounded-b-3xl px-6">
+            <Button variant="outline" onClick={() => setOverride(null)}>
+              Annuler
+            </Button>
+            <Button data-testid="override-save-button" onClick={saveOverride}>
+              Enregistrer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <ConfirmDialog
         open={!!toDelete}
         onOpenChange={(o) => !o && setToDelete(null)}
@@ -390,7 +477,7 @@ export default function Recurrences() {
         description={`« ${toDelete?.name} » sera supprimée. Les opérations déjà générées sont conservées.`}
         onConfirm={() => {
           if (toDelete) deleteRecurrence(toDelete.id);
-          toast.success("Récurrence supprimée");
+          toastUndo("Récurrence supprimée");
         }}
       />
     </div>

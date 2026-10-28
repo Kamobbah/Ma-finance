@@ -41,6 +41,15 @@ function r(name: string, conditions: RuleCondition[], category: string, setType?
   return { id: uid(), name, enabled: true, conditions, category, setType };
 }
 
+/** Règles ajoutées après coup aux installations existantes (par nom). */
+export const RULES_VERSION = 2;
+export function extraRules(): Rule[] {
+  return [
+    r("Netflix (< 20 €)", [desc("contains", "Netflix"), { id: uid(), field: "amount", op: "lt", value: 20 }], "Abonnements & numérique", "expense"),
+    { ...r("Serveurs / infrastructure", [desc("contains", "Hetzner"), desc("contains", "IONOS")], "Abonnements & numérique", "expense"), match: "any" },
+  ];
+}
+
 export function defaultRules(): Rule[] {
   return [
     r("Salaire (paie)", [desc("regex", "\\bpaie\\b"), dir("in")], "Salaire", "income"),
@@ -122,7 +131,8 @@ export function conditionMatches(c: RuleCondition, tx: Transaction): boolean {
 }
 
 export function ruleMatches(rule: Rule, tx: Transaction): boolean {
-  return rule.conditions.length > 0 && rule.conditions.every((c) => conditionMatches(c, tx));
+  if (!rule.conditions.length) return false;
+  return rule.match === "any" ? rule.conditions.some((c) => conditionMatches(c, tx)) : rule.conditions.every((c) => conditionMatches(c, tx));
 }
 
 /** Applique la première règle active correspondante (les catégories manuelles sont préservées). */
