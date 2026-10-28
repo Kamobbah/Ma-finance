@@ -15,6 +15,8 @@ import Budgets from "@/pages/Budgets";
 import Accounts from "@/pages/Accounts";
 import AccountDetail from "@/pages/AccountDetail";
 import { bootCreatedCount, bootSeedMigrated, initStore, useReady } from "@/lib/store";
+import { runAutoBudgetPrep } from "@/lib/budgetPrep";
+import { MONTHS_LONG } from "@/lib/format";
 
 let booted = false;
 
@@ -29,6 +31,8 @@ export default function App() {
         setTimeout(() => toast.success("Historique mis à jour", { description: "Le relevé complet depuis l'ouverture du compte a été chargé. Vos saisies, règles, budgets et objectifs sont conservés.", duration: 8000 }), 300);
       const n = bootCreatedCount();
       if (n) setTimeout(() => toast.success(`${n} opération(s) récurrente(s) créée(s) automatiquement`), 400);
+      const prepared = runAutoBudgetPrep();
+      if (prepared) setTimeout(() => toast.info(`Budgets de ${MONTHS_LONG[Number(prepared.slice(5)) - 1].toLowerCase()} préparés`, { description: "Vérifiez les plafonds puis validez-les depuis le rappel" }), 700);
     });
   }, []);
 

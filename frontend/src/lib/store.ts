@@ -382,6 +382,7 @@ export function usePrefs(): Prefs {
     () => prefs,
   );
 }
+export const getPrefs = () => prefs;
 export function setPrefs(patch: Partial<Prefs>) {
   prefs = { ...prefs, ...patch };
   localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));

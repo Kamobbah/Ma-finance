@@ -150,4 +150,14 @@ export interface Prefs {
   includeInternal: boolean;
   lastRecapSeen?: string; // "YYYY-MM" du dernier bilan affiché
   dismissedReminders?: string[];
+  autoBudgetPrep?: boolean; // préparation auto des budgets du mois suivant (défaut : activée)
+  budgetPrep?: Record<string, BudgetPrep>; // clé : mois préparé "YYYY-MM"
+}
+
+export interface BudgetPrep {
+  from: string; // mois copié
+  at: string; // date de préparation
+  status: "pending" | "validated" | "cancelled";
+  changes: { id: string; prev: number | null; value: number }[]; // prev : ajustement précédent (null = plafond par défaut)
+  kept: number; // budgets déjà ajustés à la main, laissés tels quels
 }

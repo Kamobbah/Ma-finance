@@ -7,7 +7,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Chip, ConfirmDialog, EmptyState, Field, NativeSelect, PageHeader, Panel, PanelTitle, ProgressBar, StatCard, inputCls } from "@/components/kit";
-import { deleteBudget, saveBudget, useData } from "@/lib/store";
+import { deleteBudget, saveBudget, setPrefs, useData, usePrefs } from "@/lib/store";
 import { averageSpent, budgetLabel, budgetLimit, budgetSpent, budgetStatuses, effectiveLimit, LEVEL_STYLES, levelOf, scopeKey, shiftMonth } from "@/lib/budgets";
 import { Checkbox } from "@/components/ui/checkbox";
 import { catColor } from "@/lib/analytics";
@@ -257,8 +257,16 @@ function CopyNextDialog({ open, onClose, mk, onDone }: { open: boolean; onClose:
 export default function Budgets() {
   const data = useData();
   const currentMk = todayIso().slice(0, 7);
-  const [mk, setMk] = useState(currentMk);
   const [params, setParams] = useSearchParams();
+  const [mk, setMk] = useState(() => (/^\d{4}-\d{2}$/.test(params.get("mois") ?? "") ? params.get("mois")! : currentMk));
+  const prefs = usePrefs();
+  useEffect(() => {
+    const m = params.get("mois");
+    if (m && /^\d{4}-\d{2}$/.test(m)) {
+      setMk(m);
+      setParams({}, { replace: true });
+    }
+  }, [params, setParams]);
   const presetAccount = params.get("compte") ?? undefined;
   const [newOpen, setNewOpen] = useState(!!presetAccount);
   const [copyOpen, setCopyOpen] = useState(false);
@@ -295,6 +303,14 @@ export default function Budgets() {
           </div>
         }
       />
+
+      <label className="-mt-2 mb-5 flex w-fit cursor-pointer items-start gap-2.5 rounded-2xl bg-white/70 px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-100">
+        <Checkbox data-testid="auto-prep-checkbox" checked={prefs.autoBudgetPrep !== false} onCheckedChange={(c) => setPrefs({ autoBudgetPrep: !!c })} className="mt-0.5" />
+        <span>
+          <b className="font-semibold">Préparation automatique</b>
+          <span className="block text-xs text-slate-500">Le dernier jour du mois, les plafonds sont copiés sur le mois suivant (vos ajustements sont conservés), puis un rappel vous invite à valider.</span>
+        </span>
+      </label>
 
       <div className="mb-5 flex items-center gap-2 animate-rise">
         <Button variant="outline" size="icon" aria-label="Mois précédent" data-testid="budget-prev-month" className="rounded-xl" onClick={() => setMk(shiftMonth(mk, -1))}>

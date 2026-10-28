@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import TransactionDialog from "./TransactionDialog";
 import RemindersBar from "./RemindersBar";
+import BudgetPrepBanner from "./BudgetPrepBanner";
 import MonthlyRecapDialog from "./MonthlyRecapDialog";
 import { openTxDialog } from "@/lib/ui";
 import { useData, useLastSaved } from "@/lib/store";
@@ -125,6 +126,7 @@ export default function AppShell() {
       <main className="lg:pl-64">
         <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
           <RemindersBar />
+          <BudgetPrepBanner />
           <Outlet />
         </div>
       </main>
