@@ -13,6 +13,7 @@ import { accountOptions, categoryOptions } from "@/lib/ui";
 import { forecast, frequencyLabel } from "@/lib/recurrence";
 import { fmtDate, money, round2, todayIso, uid } from "@/lib/format";
 import { parseAmount } from "@/lib/csv";
+import SubscriptionFinder from "@/components/SubscriptionFinder";
 import type { EndMode, Frequency, Recurrence, RecurrenceStatus } from "@/lib/types";
 
 const STATUS: Record<RecurrenceStatus, { label: string; cls: string }> = {
@@ -239,6 +240,8 @@ export default function Recurrences() {
         <StatCard testid="rec-planned-out-card" tone="plain" label={`Dépenses prévues d'ici fin ${today.slice(0, 4)}`} value={money(plannedOut)} sub={`${plannedYear.filter((o) => o.amount < 0).length} échéances`} />
         <StatCard testid="rec-planned-in-card" tone="income" label={`Revenus prévus d'ici fin ${today.slice(0, 4)}`} value={money(plannedIn)} sub={`${plannedYear.filter((o) => o.amount > 0).length} échéances`} />
       </div>
+
+      <SubscriptionFinder />
 
       <Panel className="mt-5 overflow-hidden p-0 sm:p-0" testid="recurrences-panel">
         {data.recurrences.length === 0 ? (

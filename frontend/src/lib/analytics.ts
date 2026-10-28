@@ -120,3 +120,20 @@ export function accountBalance(acc: Account, txs: Transaction[], upTo = todayIso
 export function catColor(categories: Category[], name: string) {
   return categories.find((c) => c.name === name)?.color ?? "#94A3B8";
 }
+
+/** Évolution du solde d'un compte : un point au début de période puis un point par jour d'opération. */
+export function balanceSeries(acc: Account, txs: Transaction[], from: string, to: string): { date: string; balance: number }[] {
+  const own = txs.filter((t) => t.accountId === acc.id).sort((a, b) => a.date.localeCompare(b.date));
+  let bal = acc.openingBalance;
+  for (const t of own) if (t.date < from) bal += t.amount;
+  const out: { date: string; balance: number }[] = [{ date: from, balance: round2(bal) }];
+  for (const t of own) {
+    if (t.date < from || t.date > to) continue;
+    bal += t.amount;
+    const last = out[out.length - 1];
+    if (last.date === t.date) last.balance = round2(bal);
+    else out.push({ date: t.date, balance: round2(bal) });
+  }
+  if (out[out.length - 1].date < to) out.push({ date: to, balance: round2(bal) });
+  return out;
+}

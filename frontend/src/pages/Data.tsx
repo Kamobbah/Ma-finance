@@ -107,7 +107,7 @@ export default function DataPage() {
     try {
       const parsed = JSON.parse(await file.text()) as Partial<AppData>;
       if (!Array.isArray(parsed.transactions) || !Array.isArray(parsed.accounts)) throw new Error("format");
-      setPendingJson({ version: 1, accounts: parsed.accounts, transactions: parsed.transactions, categories: parsed.categories ?? data.categories, rules: parsed.rules ?? [], recurrences: parsed.recurrences ?? [], goals: parsed.goals ?? [] });
+      setPendingJson({ version: 1, budgets: parsed.budgets ?? [], dismissedSubscriptions: parsed.dismissedSubscriptions ?? [], accounts: parsed.accounts, transactions: parsed.transactions, categories: parsed.categories ?? data.categories, rules: parsed.rules ?? [], recurrences: parsed.recurrences ?? [], goals: parsed.goals ?? [] });
     } catch {
       toast.error("Fichier JSON invalide : ce n'est pas une sauvegarde Ma Finance");
     }

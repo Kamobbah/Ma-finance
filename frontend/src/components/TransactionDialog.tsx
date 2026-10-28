@@ -8,10 +8,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, NativeSelect, inputCls } from "@/components/kit";
 import { closeTxDialog, accountOptions, categoryOptions, useTxDialog } from "@/lib/ui";
-import { saveTransaction, useData, addTransactions } from "@/lib/store";
+import { saveTransaction, useData, addTransactions, getData } from "@/lib/store";
+import { budgetStatuses } from "@/lib/budgets";
 import { MAIN_ID } from "@/lib/revolut";
 import { parseAmount } from "@/lib/csv";
-import { todayIso, TYPE_LABELS, uid } from "@/lib/format";
+import { money, todayIso, TYPE_LABELS, uid } from "@/lib/format";
 import { INTERNAL_CATEGORY } from "@/lib/rules";
 import type { Transaction, TxType } from "@/lib/types";
 
@@ -107,6 +108,15 @@ export default function TransactionDialog() {
       );
     }
     closeTxDialog();
+    const saved = getData().transactions.find((t) => t.id === base.id);
+    if (saved && saved.amount < 0 && !saved.internal) {
+      const st = budgetStatuses(getData(), saved.date.slice(0, 7)).find((x) => x.budget.category === saved.category);
+      if (st && st.level !== "ok") {
+        const msg = `Budget « ${st.budget.category} » : ${Math.round(st.ratio * 100)} % (${money(st.spent)} / ${money(st.limit)})`;
+        if (st.level === "over") toast.error("Budget dépassé", { description: msg, duration: 7000 });
+        else toast.warning("Budget bientôt atteint", { description: msg, duration: 7000 });
+      }
+    }
     const corrected = editing && !isAuto && tx!.category !== category;
     if (corrected) {
       toast.success("Catégorie corrigée", {

@@ -106,8 +106,17 @@ export interface Goal {
   createdAt: string;
 }
 
+export interface Budget {
+  id: string;
+  category: string;
+  amount: number; // plafond mensuel par défaut
+  overrides: Record<string, number>; // "YYYY-MM" -> plafond spécifique
+}
+
 export interface AppData {
   version: 1;
+  budgets: Budget[];
+  dismissedSubscriptions: string[];
   accounts: Account[];
   transactions: Transaction[];
   categories: Category[];

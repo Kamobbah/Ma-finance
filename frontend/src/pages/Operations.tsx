@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Copy, Download, FileUp, MoreHorizontal, Pencil, Plus, Search, Trash2, X, StickyNote } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -25,12 +26,13 @@ export function transactionsToCsv(txs: Transaction[], accName: (id: string) => s
 export default function Operations() {
   const data = useData();
   const prefs = usePrefs();
+  const [params] = useSearchParams();
   const [q, setQ] = useState("");
   const [year, setYear] = useState(String(prefs.year));
   const [month, setMonth] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [account, setAccount] = useState(prefs.accountFilter);
+  const [account, setAccount] = useState(params.get("account") ?? prefs.accountFilter);
   const [category, setCategory] = useState("");
   const [type, setType] = useState("");
   const [status, setStatus] = useState("");

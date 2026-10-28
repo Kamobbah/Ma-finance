@@ -10,6 +10,9 @@ import Savings from "@/pages/Savings";
 import Recurrences from "@/pages/Recurrences";
 import Rules from "@/pages/Rules";
 import DataPage from "@/pages/Data";
+import Budgets from "@/pages/Budgets";
+import Accounts from "@/pages/Accounts";
+import AccountDetail from "@/pages/AccountDetail";
 import { bootCreatedCount, initStore, useReady } from "@/lib/store";
 
 let booted = false;
@@ -43,7 +46,10 @@ export default function App() {
       <Route element={<AppShell />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/operations" element={<Operations />} />
+        <Route path="/comptes" element={<Accounts />} />
+        <Route path="/comptes/:id" element={<AccountDetail />} />
         <Route path="/analyse" element={<Annual />} />
+        <Route path="/budgets" element={<Budgets />} />
         <Route path="/epargne" element={<Savings />} />
         <Route path="/recurrences" element={<Recurrences />} />
         <Route path="/regles" element={<Rules />} />

@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import seedCsv from "@/data/releve-2026.csv?raw";
-import type { Account, AppData, Category, Goal, Prefs, Recurrence, Rule, Transaction } from "./types";
+import type { Account, AppData, Budget, Category, Goal, Prefs, Recurrence, Rule, Transaction } from "./types";
 import { applyRules, DEFAULT_CATEGORIES, defaultRules } from "./rules";
 import { parseRevolutStatement } from "./revolut";
 import { processDue } from "./recurrence";
@@ -40,7 +40,7 @@ async function idbSet(value: unknown): Promise<void> {
 }
 
 /* ---------------- Store ---------------- */
-const EMPTY: AppData = { version: 1, accounts: [], transactions: [], categories: DEFAULT_CATEGORIES, rules: [], recurrences: [], goals: [] };
+const EMPTY: AppData = { version: 1, budgets: [], dismissedSubscriptions: [], accounts: [], transactions: [], categories: DEFAULT_CATEGORIES, rules: [], recurrences: [], goals: [] };
 let state: AppData = EMPTY;
 let ready = false;
 let lastSaved: string | null = null;
@@ -136,7 +136,7 @@ export function buildSeed(): AppData {
   const { accounts, transactions } = parseRevolutStatement(seedCsv);
   const rules = defaultRules();
   const txs = transactions.map((t) => applyRules(t, rules));
-  return { version: 1, accounts, transactions: txs, categories: DEFAULT_CATEGORIES, rules, recurrences: detectRecurrences(txs), goals: [] };
+  return { version: 1, budgets: [], dismissedSubscriptions: [], accounts, transactions: txs, categories: DEFAULT_CATEGORIES, rules, recurrences: detectRecurrences(txs), goals: [] };
 }
 
 let createdOnBoot = 0;
@@ -164,6 +164,7 @@ export async function initStore() {
   }
   const first = !data;
   if (!data) data = buildSeed();
+  data = { ...EMPTY, ...data, budgets: data.budgets ?? [], dismissedSubscriptions: data.dismissedSubscriptions ?? [] };
   const res = runRecurrences(data);
   createdOnBoot = res.created;
   state = res.data;
@@ -284,6 +285,19 @@ export function deleteAccount(id: string) {
 
 export function addCategory(cat: Category) {
   update((d) => (d.categories.some((c) => c.name.toLowerCase() === cat.name.toLowerCase()) ? d : { ...d, categories: [...d.categories, cat] }));
+}
+
+export function saveBudget(b: Budget) {
+  update((d) => ({ ...d, budgets: d.budgets.some((x) => x.id === b.id) ? d.budgets.map((x) => (x.id === b.id ? b : x)) : [...d.budgets, b] }));
+}
+export function deleteBudget(id: string) {
+  update((d) => ({ ...d, budgets: d.budgets.filter((b) => b.id !== id) }));
+}
+export function dismissSubscription(key: string) {
+  update((d) => ({ ...d, dismissedSubscriptions: [...d.dismissedSubscriptions, key] }));
+}
+export function restoreSubscriptions() {
+  update((d) => ({ ...d, dismissedSubscriptions: [] }));
 }
 
 export function replaceAll(data: AppData) {

@@ -10,6 +10,7 @@ import { accountBalance, categoryBreakdown, monthly, plannedOccurrences, scopedT
 import { compact, fmtDate, money, MONTHS, MONTHS_LONG, todayIso } from "@/lib/format";
 import { buttonVariants } from "@/components/ui/button";
 import type { Recurrence } from "@/lib/types";
+import { budgetStatuses, LEVEL_STYLES } from "@/lib/budgets";
 import { cn } from "@/lib/utils";
 
 export default function Dashboard() {
@@ -42,6 +43,8 @@ export default function Dashboard() {
   const chartData = months.map((m) => ({ name: MONTHS[m.month], Revenus: m.inc, Dépenses: m.exp, Net: m.net }));
   const hasYearData = yearTx.length > 0;
 
+  const budgetAlerts = budgetStatuses(data, monthPrefix).filter((b) => b.level !== "ok").sort((a, b) => b.ratio - a.ratio);
+
   const pauseRec = (id: string) => {
     const r = data.recurrences.find((x) => x.id === id);
     if (!r) return;
@@ -66,13 +69,13 @@ export default function Dashboard() {
         <StatCard className="xl:col-span-4" testid="kpi-consolidated-card" tone="dark" label="Solde total consolidé" value={money(consolidated)} icon={<Landmark className="size-4" />} sub="Aujourd'hui, tous comptes EUR">
           <div className="mt-4 space-y-1.5 border-t border-white/10 pt-3" data-testid="consolidated-breakdown">
             {balances.map(({ acc, bal }) => (
-              <div key={acc.id} className="flex items-center justify-between text-xs">
+              <Link key={acc.id} to={`/comptes/${acc.id}`} data-testid={`consolidated-account-${acc.id}`} className="-mx-1.5 flex items-center justify-between rounded-lg px-1.5 py-0.5 text-xs transition-colors hover:bg-white/10">
                 <span className="flex items-center gap-2 text-slate-300">
                   <span className="size-2 rounded-full" style={{ background: acc.color }} />
                   {acc.name}
                 </span>
                 <span className="font-semibold tabular text-white">{money(bal, acc.currency)}</span>
-              </div>
+              </Link>
             ))}
           </div>
         </StatCard>
@@ -83,6 +86,20 @@ export default function Dashboard() {
           <StatCard testid="kpi-month-card" tone="plain" label={`Ce mois-ci · ${MONTHS_LONG[Number(monthPrefix.slice(5)) - 1]}`} value={money(thisMonth.net, "EUR", true)} icon={<Wallet className="size-4 text-slate-700" />} sub={`${money(thisMonth.inc)} entrés · ${money(thisMonth.exp)} sortis`} />
         </div>
       </div>
+
+      {budgetAlerts.length > 0 && (
+        <div data-testid="dashboard-budget-alerts" className="mt-5 flex flex-wrap items-center gap-2 rounded-3xl border border-amber-200/70 bg-amber-50/60 p-3 pl-4 animate-rise">
+          <span className="text-sm font-semibold text-amber-900">Budgets de {MONTHS_LONG[Number(monthPrefix.slice(5)) - 1].toLowerCase()} :</span>
+          {budgetAlerts.map((b) => (
+            <span key={b.budget.id} data-testid="dashboard-budget-alert" className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset", LEVEL_STYLES[b.level].chip)}>
+              {b.budget.category} · {Math.round(b.ratio * 100)} %
+            </span>
+          ))}
+          <Link to="/budgets" data-testid="dashboard-budgets-link" className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "ml-auto text-xs")}>
+            Voir les budgets
+          </Link>
+        </div>
+      )}
 
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-12">
         <Panel className="xl:col-span-8" testid="monthly-chart-panel">

@@ -1,17 +1,21 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useState } from "react";
-import { LayoutDashboard, ListOrdered, LineChart, PiggyBank, Repeat, Wand2, Database, Plus, Menu, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, ListOrdered, LineChart, PiggyBank, Repeat, Wand2, Database, Plus, Menu, ShieldCheck, Target, WalletCards } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import TransactionDialog from "./TransactionDialog";
 import { openTxDialog } from "@/lib/ui";
-import { useLastSaved } from "@/lib/store";
+import { useData, useLastSaved } from "@/lib/store";
+import { budgetStatuses } from "@/lib/budgets";
+import { todayIso } from "@/lib/format";
 
 export const NAV = [
   { to: "/", label: "Tableau de bord", icon: LayoutDashboard, id: "dashboard" },
   { to: "/operations", label: "Opérations", icon: ListOrdered, id: "operations" },
+  { to: "/comptes", label: "Comptes & Pockets", icon: WalletCards, id: "comptes" },
   { to: "/analyse", label: "Analyse annuelle", icon: LineChart, id: "analyse" },
+  { to: "/budgets", label: "Budgets", icon: Target, id: "budgets" },
   { to: "/epargne", label: "Épargne", icon: PiggyBank, id: "epargne" },
   { to: "/recurrences", label: "Récurrences", icon: Repeat, id: "recurrences" },
   { to: "/regles", label: "Règles", icon: Wand2, id: "regles" },
@@ -33,6 +37,9 @@ function Logo() {
 }
 
 function NavItems({ onNavigate }: { onNavigate?: () => void }) {
+  const data = useData();
+  const alerts = budgetStatuses(data, todayIso().slice(0, 7)).filter((s) => s.level !== "ok");
+  const over = alerts.some((a) => a.level === "over");
   return (
     <nav className="flex flex-col gap-1">
       {NAV.map((n) => (
@@ -51,6 +58,11 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
         >
           <n.icon className="size-[18px]" />
           {n.label}
+          {n.id === "budgets" && alerts.length > 0 && (
+            <span data-testid="nav-budget-alerts" className={cn("ml-auto grid min-w-5 place-items-center rounded-full px-1.5 text-[10px] font-bold text-white", over ? "bg-rose-500" : "bg-amber-500")}>
+              {alerts.length}
+            </span>
+          )}
         </NavLink>
       ))}
     </nav>

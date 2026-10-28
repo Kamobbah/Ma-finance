@@ -26,8 +26,13 @@ Account, Transaction (montant signé, type income|expense|transfer_in|transfer_o
 - Règles : première règle active correspondante ; catégories manuelles jamais écrasées ; pas de correspondance → « Non classé » / À vérifier. Correction manuelle → toast proposant de créer une règle (/regles?desc=…&cat=…).
 - Objectifs : répartition virtuelle ; alerte si total alloué > solde réel épargne.
 
+## Fonctionnalités v2
+- Détecteur d'abonnements (src/lib/subscriptions.ts, page Récurrences) : dépenses non internes, même marchand (description normalisée), montant ±10 % du dernier, ≥3 mois consécutifs (trou d'1 mois toléré), dernière occurrence < 45 jours, non couvertes par une récurrence existante. « Suivre en récurrence » crée une récurrence mensuelle en 1 clic ; « Ignorer » stocke la clé dans `dismissedSubscriptions`.
+- Budgets (src/lib/budgets.ts, page /budgets) : `Budget {category, amount (défaut mensuel), overrides{"YYYY-MM": montant}}`. Dépensé = dépenses réelles (hors internes) de la catégorie, tous comptes EUR. Niveaux : ok <80 %, warn ≥80 %, over >100 %. Alertes : badge sur la nav, bandeau tableau de bord, toast après ajout/modif d'une opération. Vue annuelle cliquable pour ajuster un mois.
+- Comptes & Pockets (/comptes, /comptes/:id) : solde, mini-courbe, transferts entrants/sortants ; détail avec évolution du solde, barres mensuelles, origines/destinations des transferts par compte, catégories de dépenses, liste des transferts. Lien « Voir les opérations » → /operations?account=<id>.
+
 ## Pages
-/ Tableau de bord · /operations · /analyse · /epargne · /recurrences · /regles · /donnees (import CSV avec mapping/aperçu/doublons, import/export JSON, export CSV, comptes, catégories, réinitialisation avec saisie « RÉINITIALISER »).
+/ Tableau de bord · /operations · /comptes · /comptes/:id · /analyse · /budgets · /epargne · /recurrences · /regles · /donnees (import CSV avec mapping/aperçu/doublons, import/export JSON, export CSV, comptes, catégories, réinitialisation avec saisie « RÉINITIALISER »).
 
 ## Auth
 Aucune.
