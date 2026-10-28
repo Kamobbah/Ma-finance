@@ -15,8 +15,8 @@ Pensée pour un usage Revolut (compte principal, Pockets, compte d'épargne, com
 - **Page détail par compte** : courbe du solde, transferts entrants / sortants, dépenses par catégorie, budget du compte, objectif de Pocket (tirelire avec jauge).
 
 ### Trésorerie et salaire
-- **Trésorerie jusqu'à la paie** (tableau de bord) : disponible aujourd'hui − échéances prévues − dépenses courantes estimées = report estimé la veille de la paie.
-- La paie est toute opération de revenu de catégorie **Salaire** (règle « Salaire ALDI » fournie ; un nouvel employeur = une nouvelle règle). Aucun jour fixe : la prochaine paie est prévue « au plus tard » à partir de l'historique (dernière paie + plus long des 3 derniers écarts).
+- **Trésorerie** (page *Trésorerie*) : solde projeté jour par jour, point bas, et **report nécessaire** en début de mois pour ne jamais passer sous zéro.
+- Le salaire y est prévu automatiquement : toute opération de revenu de catégorie **Salaire** est une paie (règle « Salaire ALDI » fournie ; un nouvel employeur = une nouvelle règle). Aucun jour fixe : prochaine paie « au plus tard » = dernière paie + plus long des 3 derniers écarts, au montant le plus bas des 3 dernières paies.
 
 ### Opérations
 - **Lecture de ticket par IA** : photographier un ticket remplit le montant, la date et l'enseigne (Claude, clé `ANTHROPIC_API_KEY` dans `backend/.env`).
@@ -67,7 +67,7 @@ Pensée pour un usage Revolut (compte principal, Pockets, compte d'épargne, com
 - **Recharts** pour les graphiques, **sonner** pour les notifications
 - **React Router** pour la navigation
 
-- **FastAPI** + **Motor** (MongoDB) dans `backend/` : `GET/PUT /api/data`, `POST /api/receipt`.
+- **FastAPI** + **Motor** (MongoDB) dans `backend/` : `GET/PUT /api/data`, `GET/PUT /api/backups`, `POST/GET /api/attachments`, `POST /api/receipt`.
 
 ---
 

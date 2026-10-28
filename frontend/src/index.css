@@ -138,3 +138,51 @@
 }
 
 .tabular { font-variant-numeric: tabular-nums; }
+
+/* ---------- Mode sombre : surcharge des teintes claires codées en dur ---------- */
+.dark {
+  color-scheme: dark;
+  --background: #0E1116;
+  --foreground: #E6E8EB;
+  --card: #151A21;
+  --popover: #151A21;
+  --popover-foreground: #E6E8EB;
+  --muted: #1C232C;
+  --muted-foreground: #9AA4B2;
+  --border: #263040;
+  --input: #263040;
+  --primary: #E6E8EB;
+  --primary-foreground: #0E1116;
+  --accent: #1C232C;
+  --accent-foreground: #E6E8EB;
+}
+.dark body { background: #0E1116; color: #E6E8EB; }
+.dark .bg-white, .dark .bg-white\/80, .dark .bg-white\/70, .dark .bg-white\/95, .dark .bg-white\/50, .dark .bg-background { background-color: #151A21 !important; }
+.dark .bg-slate-50, .dark .bg-slate-50\/60, .dark .bg-slate-50\/70, .dark .bg-slate-100, .dark .bg-slate-100\/80 { background-color: #1C232C !important; }
+.dark .bg-slate-900 { background-color: #E6E8EB !important; color: #0E1116 !important; }
+.dark .bg-slate-900 * { color: inherit; }
+.dark .text-slate-900, .dark .text-slate-800 { color: #F1F3F5 !important; }
+.dark .text-slate-700, .dark .text-slate-600 { color: #C3CAD3 !important; }
+.dark .text-slate-500, .dark .text-slate-400 { color: #8B95A3 !important; }
+.dark .border-slate-100, .dark .border-slate-200, .dark .border-slate-200\/50, .dark .border-slate-200\/60, .dark .border-slate-200\/70, .dark .border-slate-50 { border-color: #263040 !important; }
+.dark .ring-slate-100, .dark .ring-slate-200 { --tw-ring-color: #263040 !important; }
+.dark [class*="bg-[#EEF8F1]"] { background-color: #0F2A1E !important; color: #A7F3D0 !important; }
+.dark [class*="bg-[#FCF0EF]"] { background-color: #2E1418 !important; color: #FECDD3 !important; }
+.dark [class*="bg-[#EEF3FB]"] { background-color: #121F36 !important; color: #BFDBFE !important; }
+.dark [class*="bg-[#FBF5E8]"] { background-color: #2B2210 !important; color: #FDE68A !important; }
+.dark [class*="bg-emerald-50"] { background-color: #0F2A1E !important; }
+.dark [class*="bg-rose-50"] { background-color: #2E1418 !important; }
+.dark [class*="bg-amber-50"] { background-color: #2B2210 !important; }
+.dark [class*="bg-blue-50"], .dark [class*="bg-cyan-50"], .dark [class*="bg-violet-50"] { background-color: #16203A !important; }
+.dark [class*="text-emerald-9"], .dark [class*="text-emerald-8"] { color: #A7F3D0 !important; }
+.dark [class*="text-rose-9"], .dark [class*="text-rose-8"] { color: #FECDD3 !important; }
+.dark [class*="text-amber-9"], .dark [class*="text-amber-8"] { color: #FDE68A !important; }
+.dark [class*="text-blue-9"], .dark [class*="text-blue-8"], .dark [class*="text-violet-9"], .dark [class*="text-violet-8"], .dark [class*="text-cyan-9"], .dark [class*="text-cyan-8"] { color: #BFDBFE !important; }
+.dark [class*="from-cyan-50"], .dark [class*="from-rose-50"], .dark [class*="from-violet-50"] { --tw-gradient-from: #151A21 !important; --tw-gradient-to: #151A21 !important; }
+.dark input, .dark select, .dark textarea { background-color: #1C232C; color: #E6E8EB; border-color: #263040; }
+.dark .recharts-cartesian-grid line { stroke: #263040; }
+
+/* ---------- Densité compacte ---------- */
+.compact td, .compact th { padding-top: 0.35rem !important; padding-bottom: 0.35rem !important; }
+.compact table { font-size: 0.8125rem; }
+.compact [data-testid$="-card"] { padding: 1rem !important; }

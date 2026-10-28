@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
+import TodayOverview from "@/components/TodayOverview";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowDownRight, ArrowUpRight, CalendarClock, Landmark, Pause, Pencil, Scale, Square, Wallet } from "lucide-react";
 import { Bar, CartesianGrid, Cell, ComposedChart, Legend, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 import GlobalFilters from "@/components/GlobalFilters";
-import TreasuryCard from "@/components/TreasuryCard";
 import { Amount, ChartTooltip, ConfirmDialog, EmptyState, Panel, PanelTitle, StatCard, TypeBadge } from "@/components/kit";
 import { saveRecurrence, useData, usePrefs } from "@/lib/store";
 import { accountBalance, categoryBreakdown, monthly, plannedOccurrences, scopedTx, scopeLabel, sumFlows } from "@/lib/analytics";
@@ -39,6 +39,7 @@ export default function Dashboard() {
   const horizon = new Date();
   horizon.setDate(horizon.getDate() + 45);
   const upcoming = plannedOccurrences(data.recurrences, new Set(data.accounts.map((a) => a.id)), today, horizon.toISOString().slice(0, 10))
+    .filter((o) => !(o.internal && o.amount > 0))
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(0, 6);
   const accName = (id: string) => data.accounts.find((a) => a.id === id)?.name ?? "—";
@@ -69,6 +70,7 @@ export default function Dashboard() {
         </div>
         <p className="text-sm text-slate-500">{new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
       </div>
+      <TodayOverview />
       <GlobalFilters />
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12 xl:gap-5">
@@ -123,7 +125,6 @@ export default function Dashboard() {
         </button>
       )}
 
-      <TreasuryCard />
 
       {budgetAlerts.length > 0 && (
         <div data-testid="dashboard-budget-alerts" className="mt-5 flex flex-wrap items-center gap-2 rounded-3xl border border-amber-200/70 bg-amber-50/60 p-3 pl-4 animate-rise">
@@ -280,6 +281,7 @@ export default function Dashboard() {
                       <p className="truncate text-sm font-semibold text-slate-800">{o.name}</p>
                       <p className="flex items-center gap-1 text-xs text-slate-500">
                         <CalendarClock className="size-3" /> {fmtDate(o.date)}
+                        {o.internal && <span data-testid={`upcoming-transfer-${i}`}> · virement auto vers {accName(data.recurrences.find((r) => r.id === o.recurrenceId)?.toAccountId ?? "")}</span>}
                       </p>
                     </div>
                     <Amount value={o.amount} className="text-sm" />

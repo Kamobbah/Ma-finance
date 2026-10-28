@@ -1,10 +1,10 @@
 import { useSyncExternalStore } from "react";
 import seedCsv from "@/data/releve-revolut.csv?raw";
 import { syncGoalStatus } from "./goals";
-import type { Account, AppData, Budget, Category, Goal, Prefs, Recurrence, Rule, Transaction } from "./types";
-import { applyRules, DEFAULT_CATEGORIES, defaultRules } from "./rules";
+import type { Account, AppData, Budget, Category, Goal, ImportBatch, Prefs, Recurrence, Rule, SavedFilter, Transaction, TrashItem } from "./types";
+import { applyRules, DEFAULT_CATEGORIES, defaultRules, extraRules, RULES_VERSION } from "./rules";
 import { parseRevolutStatement } from "./revolut";
-import { processDue } from "./recurrence";
+import { postNext, processDue } from "./recurrence";
 import { fromIso, round2, todayIso, toIso, uid } from "./format";
 import { ApiError, apiGet, apiPut } from "./api";
 import { toast } from "sonner";
@@ -43,6 +43,116 @@ function set(next: AppData) {
 
 export function update(fn: (d: AppData) => AppData) {
   set(fn(state));
+}
+
+/* ---------------- Annuler (session) + corbeille (persistée) ---------------- */
+const undoStack: { label: string; state: AppData }[] = [];
+/** Mémorise l'état avant une modification destructive, pour pouvoir l'annuler. */
+export function checkpoint(label: string) {
+  undoStack.push({ label, state });
+  if (undoStack.length > 20) undoStack.shift();
+}
+export function canUndo() {
+  return undoStack.length > 0;
+}
+export function undo(): string | null {
+  const last = undoStack.pop();
+  if (!last) return null;
+  set(last.state);
+  return last.label;
+}
+const TRASH_DAYS = 30;
+function toTrash(d: AppData, kind: TrashItem["kind"], label: string, item: TrashItem["item"]): TrashItem[] {
+  const limit = new Date(Date.now() - TRASH_DAYS * 864e5).toISOString();
+  return [{ id: uid(), kind, label, item, deletedAt: new Date().toISOString() }, ...(d.trash ?? []).filter((t) => t.deletedAt > limit)].slice(0, 300);
+}
+export function restoreFromTrash(id: string) {
+  update((d) => {
+    const it = (d.trash ?? []).find((t) => t.id === id);
+    if (!it) return d;
+    const trash = (d.trash ?? []).filter((t) => t.id !== id);
+    if (it.kind === "transaction") return { ...d, trash, transactions: [...d.transactions, it.item as Transaction] };
+    if (it.kind === "goal") return { ...d, trash, goals: [...d.goals, it.item as Goal] };
+    if (it.kind === "recurrence") return { ...d, trash, recurrences: [...d.recurrences, it.item as Recurrence] };
+    return { ...d, trash, budgets: [...d.budgets, it.item as Budget] };
+  });
+}
+export function emptyTrash() {
+  checkpoint("Vider la corbeille");
+  update((d) => ({ ...d, trash: [] }));
+}
+
+/* ---------------- Imports ---------------- */
+export function recordImport(batch: ImportBatch, txs: Transaction[], accounts: Account[]) {
+  update((d) => ({
+    ...d,
+    accounts: [...d.accounts, ...accounts.filter((a) => !d.accounts.some((x) => x.id === a.id))],
+    transactions: [...d.transactions, ...txs.map((t) => ({ ...t, importId: batch.id }))],
+    imports: [batch, ...(d.imports ?? [])],
+  }));
+}
+/** Annule un import complet : retire toutes ses opérations (annulable). */
+export function cancelImport(id: string): number {
+  checkpoint("Annulation d'import");
+  const n = state.transactions.filter((t) => t.importId === id).length;
+  update((d) => ({ ...d, transactions: d.transactions.filter((t) => t.importId !== id), imports: (d.imports ?? []).map((b) => (b.id === id ? { ...b, status: "cancelled" as const } : b)) }));
+  return n;
+}
+/** Retraite un import : réapplique les règles à ses opérations non corrigées à la main. */
+export function reprocessImport(id: string): number {
+  let n = 0;
+  update((d) => ({
+    ...d,
+    transactions: d.transactions.map((t) => {
+      if (t.importId !== id || t.catStatus === "manual" || t.internal) return t;
+      const next = applyRules({ ...t, catStatus: "to_review" }, d.rules);
+      if (next.category !== t.category || next.catStatus !== t.catStatus) n++;
+      return next;
+    }),
+  }));
+  return n;
+}
+
+/* ---------------- Filtres enregistrés / étiquettes ---------------- */
+export function saveFilter(f: SavedFilter) {
+  update((d) => ({ ...d, savedFilters: [...(d.savedFilters ?? []).filter((x) => x.id !== f.id), f] }));
+}
+export function deleteFilter(id: string) {
+  update((d) => ({ ...d, savedFilters: (d.savedFilters ?? []).filter((x) => x.id !== id) }));
+}
+export function addTag(tag: string) {
+  update((d) => ((d.tags ?? []).includes(tag) ? d : { ...d, tags: [...(d.tags ?? []), tag].sort() }));
+}
+/** Applique une catégorie à plusieurs opérations (suggestion appliquée aux similaires). */
+export function setCategoryMany(ids: string[], category: string) {
+  checkpoint("Catégorisation groupée");
+  const set_ = new Set(ids);
+  update((d) => ({ ...d, transactions: d.transactions.map((t) => (set_.has(t.id) ? { ...t, category, catStatus: "manual" as const } : t)) }));
+}
+
+/* ---------------- Sauvegardes automatiques (MongoDB, collection backups) ---------------- */
+export interface LocalBackup {
+  at: string;
+  data: AppData;
+}
+export async function listBackups(): Promise<LocalBackup[]> {
+  return apiGet<LocalBackup[]>("/backups");
+}
+/** Une sauvegarde par jour, 7 conservées. */
+export async function autoBackup(force = false): Promise<boolean> {
+  const list = await listBackups();
+  const day = todayIso();
+  if (!force && list[0]?.at.slice(0, 10) === day) return false;
+  const next = [{ at: new Date().toISOString(), data: state }, ...list.filter((b) => force || b.at.slice(0, 10) !== day)].slice(0, 7);
+  await apiPut("/backups", next);
+  return true;
+}
+export async function restoreBackup(at: string) {
+  const b = (await listBackups()).find((x) => x.at === at);
+  if (!b) return false;
+  checkpoint("Restauration de sauvegarde");
+  set(b.data);
+  return true;
 }
 
 export function useData(): AppData {
@@ -175,6 +285,10 @@ export async function initStore() {
     migrated = true;
   }
   data = { ...EMPTY, ...data, budgets: data.budgets ?? [], dismissedSubscriptions: data.dismissedSubscriptions ?? [] };
+  if ((data.rulesVersion ?? 1) < RULES_VERSION) {
+    const extra = extraRules().filter((r) => !data!.rules.some((o) => o.name === r.name));
+    data = { ...data, rules: [...extra, ...data.rules], rulesVersion: RULES_VERSION };
+  }
   const res = runRecurrences(data);
   createdOnBoot = res.created;
   seedMigrated = migrated;
@@ -190,6 +304,7 @@ export function addTransactions(txs: Transaction[], autoCategorize = true) {
 }
 
 export function saveTransaction(tx: Transaction, autoCategorize: boolean) {
+  if (state.transactions.some((x) => x.id === tx.id)) checkpoint("Modification d'opération");
   update((d) => {
     const t = autoCategorize ? applyRules({ ...tx, catStatus: "to_review" }, d.rules) : tx;
     const exists = d.transactions.some((x) => x.id === t.id);
@@ -198,7 +313,20 @@ export function saveTransaction(tx: Transaction, autoCategorize: boolean) {
 }
 
 export function deleteTransaction(id: string) {
-  update((d) => ({ ...d, transactions: d.transactions.filter((t) => t.id !== id) }));
+  checkpoint("Suppression d'opération");
+  update((d) => {
+    const t = d.transactions.find((x) => x.id === id);
+    return t ? { ...d, transactions: d.transactions.filter((x) => x.id !== id), trash: toTrash(d, "transaction", t.description, t) } : d;
+  });
+}
+export function deleteTransactions(ids: string[]) {
+  checkpoint("Suppression groupée");
+  const sel = new Set(ids);
+  update((d) => {
+    let trash = d.trash ?? [];
+    for (const t of d.transactions.filter((x) => sel.has(x.id))) trash = toTrash({ ...d, trash }, "transaction", t.description, t);
+    return { ...d, transactions: d.transactions.filter((x) => !sel.has(x.id)), trash };
+  });
 }
 
 export function duplicateTransaction(id: string): Transaction | undefined {
@@ -260,7 +388,24 @@ export function saveRecurrence(rec: Recurrence): number {
   return created;
 }
 export function deleteRecurrence(id: string) {
-  update((d) => ({ ...d, recurrences: d.recurrences.filter((r) => r.id !== id) }));
+  checkpoint("Suppression de récurrence");
+  update((d) => {
+    const r = d.recurrences.find((x) => x.id === id);
+    return r ? { ...d, recurrences: d.recurrences.filter((x) => x.id !== id), trash: toTrash(d, "recurrence", r.name, r) } : d;
+  });
+}
+/** Rattrapage / validation manuelle : enregistre la prochaine échéance due. */
+export function postRecurrence(id: string): number {
+  let n = 0;
+  update((d) => {
+    const r = d.recurrences.find((x) => x.id === id);
+    if (!r || r.status !== "active") return d;
+    const cur = d.accounts.find((a) => a.id === r.accountId)?.currency ?? "EUR";
+    const res = postNext(r, cur);
+    n = res.created.length;
+    return { ...d, recurrences: d.recurrences.map((x) => (x.id === id ? res.rec : x)), transactions: [...d.transactions, ...res.created] };
+  });
+  return n;
 }
 
 export function saveGoal(goal: Goal) {
@@ -274,10 +419,13 @@ export function saveGoals(goals: Goal[]) {
   });
 }
 export function deleteGoal(id: string) {
+  checkpoint("Suppression d'objectif");
+  const g = state.goals.find((x) => x.id === id);
+  if (g) update((d) => ({ ...d, trash: toTrash(d, "goal", g.name, g) }));
   update((d) => ({ ...d, goals: d.goals.filter((g) => g.id !== id) }));
 }
 /** amounts: goalId -> montant (+ allouer / - désallouer) */
-export function allocate(amounts: Record<string, number>) {
+export function allocate(amounts: Record<string, number>, source?: string) {
   const date = todayIso();
   update((d) => ({
     ...d,
@@ -286,7 +434,7 @@ export function allocate(amounts: Record<string, number>) {
       if (!a) return g;
       const allocated = round2(Math.max(0, g.allocated + a));
       const delta = round2(allocated - g.allocated);
-      return syncGoalStatus({ ...g, allocated, history: [...g.history, { date, amount: delta }] });
+      return syncGoalStatus({ ...g, allocated, history: [...g.history, { date, amount: delta, source }] });
     }),
   }));
 }
@@ -306,6 +454,9 @@ export function saveBudget(b: Budget) {
   update((d) => ({ ...d, budgets: d.budgets.some((x) => x.id === b.id) ? d.budgets.map((x) => (x.id === b.id ? b : x)) : [...d.budgets, b] }));
 }
 export function deleteBudget(id: string) {
+  checkpoint("Suppression de budget");
+  const b = state.budgets.find((x) => x.id === id);
+  if (b) update((d) => ({ ...d, trash: toTrash(d, "budget", b.category || "Budget de compte", b) }));
   update((d) => ({ ...d, budgets: d.budgets.filter((b) => b.id !== id) }));
 }
 export function dismissSubscription(key: string) {
@@ -346,6 +497,7 @@ export function usePrefs(): Prefs {
     () => prefs,
   );
 }
+export const getPrefs = () => prefs;
 export function setPrefs(patch: Partial<Prefs>) {
   prefs = { ...prefs, ...patch };
   localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));

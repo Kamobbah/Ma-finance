@@ -1,11 +1,12 @@
 import asyncio
 import json
+import uuid
 from typing import Literal
 
 import anthropic
 from pydantic import BaseModel, Field
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, APIRouter, Body, HTTPException
+from fastapi import FastAPI, APIRouter, Body, HTTPException, Request, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 import os
@@ -51,6 +52,40 @@ async def get_data():
 @api_router.put("/data", status_code=204)
 async def put_data(data: dict = Body(...)):
     await db.app_data.replace_one({"_id": DATA_ID}, data, upsert=True)
+
+
+MAX_ATTACHMENT = 3 * 1024 * 1024
+
+
+@api_router.post("/attachments")
+async def upload_attachment(request: Request):
+    body = await request.body()
+    if len(body) > MAX_ATTACHMENT:
+        raise HTTPException(413, "Fichier de plus de 3 Mo")
+    _id = str(uuid.uuid4())
+    await db.attachments.insert_one({"_id": _id, "type": request.headers.get("content-type", "application/octet-stream"), "data": body})
+    return {"url": f"/api/attachments/{_id}"}
+
+
+@api_router.get("/attachments/{_id}")
+async def get_attachment(_id: str):
+    doc = await db.attachments.find_one({"_id": _id})
+    if doc is None:
+        raise HTTPException(404, "Pièce jointe introuvable")
+    return Response(doc["data"], media_type=doc["type"])
+
+
+# Sauvegardes automatiques : un document par sauvegarde (chacune pèse autant que les données).
+@api_router.get("/backups")
+async def get_backups():
+    return await db.backups.find({}, {"_id": 0}).sort("at", -1).to_list(20)
+
+
+@api_router.put("/backups", status_code=204)
+async def put_backups(backups: list = Body(...)):
+    await db.backups.delete_many({})
+    if backups:
+        await db.backups.insert_many(backups)
 
 
 RECEIPT_SCHEMA = {

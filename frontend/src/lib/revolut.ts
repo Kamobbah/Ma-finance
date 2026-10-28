@@ -146,6 +146,7 @@ export function parseRevolutStatement(text: string, existing: Account[] = []): B
     source: "import",
     catStatus: "to_review",
     createdAt: new Date(baseTime + raw.idx).toISOString(),
+    balance: raw.balance ?? undefined,
     ...extra,
   });
   const dirType = (a: number): TxType => (a >= 0 ? "transfer_in" : "transfer_out");

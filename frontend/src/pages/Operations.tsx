@@ -1,13 +1,17 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Copy, Download, FileUp, MoreHorizontal, Pencil, Plus, Search, Trash2, X, StickyNote } from "lucide-react";
 import { toast } from "sonner";
+import { toastUndo } from "@/lib/undo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Amount, CatStatusBadge, ConfirmDialog, EmptyState, Field, NativeSelect, PageHeader, Panel, SourceBadge, TypeBadge, inputCls } from "@/components/kit";
 import CsvImportDialog from "@/components/CsvImportDialog";
-import { deleteTransaction, duplicateTransaction, usePrefs, useData } from "@/lib/store";
+import { deleteFilter, deleteTransaction, duplicateTransaction, saveFilter, setCategoryMany, usePrefs, useData } from "@/lib/store";
+import { isRecurringTx, LOW_CONFIDENCE, suggestCategory } from "@/lib/smart";
+import type { SavedFilter } from "@/lib/types";
+import { Bookmark, Paperclip, Repeat, Sparkles } from "lucide-react";
 import { accountOptions, categoryOptions, openTxDialog, yearOptions } from "@/lib/ui";
 import { fmtDate, money, MONTHS_LONG, TYPE_LABELS } from "@/lib/format";
 import { downloadFile, parseAmount, toCsv } from "@/lib/csv";
@@ -27,7 +31,17 @@ export default function Operations() {
   const data = useData();
   const prefs = usePrefs();
   const [params] = useSearchParams();
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(params.get("q") ?? "");
+  const [tag, setTag] = useState(params.get("tag") ?? "");
+  const [kind, setKind] = useState("");
+  useEffect(() => {
+    const pq = params.get("q");
+    if (pq !== null) {
+      setQ(pq);
+      setYear("");
+    }
+  }, [params]);
+  const [naming, setNaming] = useState<string | null>(null);
   const [year, setYear] = useState(String(prefs.year));
   const [month, setMonth] = useState("");
   const [from, setFrom] = useState("");
@@ -59,12 +73,15 @@ export default function Operations() {
         if (to && t.date > to) return false;
         if (category && t.category !== category) return false;
         if (type && t.type !== type) return false;
+        if (tag && !(t.tags ?? []).includes(tag)) return false;
+        if (kind === "recurring" && !isRecurringTx(data, t)) return false;
+        if (kind === "oneoff" && (t.amount >= 0 || t.internal || isRecurringTx(data, t))) return false;
         if (status && t.catStatus !== status && t.source !== status) return false;
         const a = Math.abs(t.amount);
         if (minV !== null && a < minV) return false;
         if (maxV !== null && a > maxV) return false;
         if (needle) {
-          const hay = `${t.description} ${t.category} ${accName(t.accountId)} ${t.note ?? ""}`.toLowerCase();
+          const hay = `${t.description} ${t.category} ${accName(t.accountId)} ${t.note ?? ""} ${(t.tags ?? []).map((x) => `#${x}`).join(" ")} ${(t.attachments ?? []).map((a) => a.name).join(" ")}`.toLowerCase();
           const amountHit = needleNum !== null && Math.abs(a - Math.abs(needleNum)) < 0.005;
           if (!hay.includes(needle) && !amountHit && !String(a).includes(needle.replace(",", "."))) return false;
         }
@@ -72,7 +89,7 @@ export default function Operations() {
       })
       .sort((x, y) => y.date.localeCompare(x.date) || y.createdAt.localeCompare(x.createdAt));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, q, year, month, from, to, account, category, type, status, min, max]);
+  }, [data, q, year, month, from, to, account, category, type, status, min, max, tag, kind]);
 
   const totals = filtered.reduce((s, t) => ({ inc: s.inc + (t.amount > 0 ? t.amount : 0), out: s.out + (t.amount < 0 ? -t.amount : 0) }), { inc: 0, out: 0 });
   const toReview = filtered.filter((t) => t.catStatus === "to_review").length;
@@ -89,6 +106,37 @@ export default function Operations() {
     setStatus("");
     setMin("");
     setMax("");
+    setTag("");
+    setKind("");
+  };
+  const curYear = String(new Date().getFullYear());
+  const carCat = data.categories.find((c) => /voiture/i.test(c.name))?.name;
+  const builtIn: SavedFilter[] = [
+    ...(carCat ? [{ id: "bi-car", name: `Dépenses voiture ${curYear}`, query: "", category: carCat, year: curYear }] : []),
+    { id: "bi-subs", name: "Abonnements et charges récurrentes", query: "", kind: "recurring", year: "" },
+    { id: "bi-review", name: "Non classées / à vérifier", query: "", kind: "review", year: "" },
+    { id: "bi-refund", name: "#remboursable", query: "", tag: "remboursable", year: "" },
+  ];
+  const applyFilter = (f: SavedFilter) => {
+    reset();
+    setQ(f.query);
+    setYear(f.year ?? "");
+    setAccount(f.account ?? "all");
+    setCategory(f.category ?? "");
+    setTag(f.tag ?? "");
+    if (f.kind === "review") setStatus("to_review");
+    else setKind(f.kind ?? "");
+  };
+  const saveCurrent = () => {
+    if (!naming?.trim()) return toast.error("Donnez un nom au filtre");
+    saveFilter({ id: crypto.randomUUID(), name: naming.trim(), query: q, year, account, category, tag, kind: status === "to_review" ? "review" : kind });
+    setNaming(null);
+    toast.success("Filtre enregistré");
+  };
+  const applySuggestion = (t: Transaction, cat: string, ids: string[]) => {
+    const all = [...new Set([t.id, ...ids])];
+    setCategoryMany(all, cat);
+    toastUndo(`« ${cat} » appliquée à ${all.length} opération${all.length > 1 ? "s" : ""}`);
   };
 
   const exportCsv = () => {
@@ -122,6 +170,33 @@ export default function Operations() {
         <div className="relative mb-4">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
           <Input data-testid="operations-search-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher par description, catégorie, compte ou montant…" className="h-11 rounded-2xl border-slate-200 bg-slate-50 pl-10" />
+        </div>
+        <div className="mb-4 flex flex-wrap items-center gap-1.5" data-testid="saved-filters">
+          <Bookmark className="size-4 text-slate-400" />
+          {[...builtIn, ...(data.savedFilters ?? [])].map((f) => (
+            <span key={f.id} className="inline-flex items-center rounded-full bg-white ring-1 ring-slate-200 transition-colors hover:bg-slate-50">
+              <button data-testid={`saved-filter-${f.id}`} onClick={() => applyFilter(f)} className="px-3 py-1 text-xs font-semibold text-slate-700">
+                {f.name}
+              </button>
+              {!f.id.startsWith("bi-") && (
+                <button aria-label="Supprimer le filtre" data-testid="saved-filter-delete" onClick={() => deleteFilter(f.id)} className="pr-2 text-slate-400 hover:text-rose-600">
+                  <X className="size-3" />
+                </button>
+              )}
+            </span>
+          ))}
+          {naming === null ? (
+            <button data-testid="save-filter-button" onClick={() => setNaming("")} className="rounded-full px-3 py-1 text-xs font-medium text-slate-500 ring-1 ring-dashed ring-slate-300 hover:text-slate-900">
+              + Enregistrer ce filtre
+            </button>
+          ) : (
+            <span className="inline-flex items-center gap-1">
+              <Input data-testid="save-filter-name" autoFocus value={naming} onChange={(e) => setNaming(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveCurrent()} placeholder="Nom du filtre" className="h-8 w-44 rounded-full text-xs" />
+              <Button size="sm" className="h-8 rounded-full" data-testid="save-filter-confirm" onClick={saveCurrent}>
+                OK
+              </Button>
+            </span>
+          )}
         </div>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
           <Field label="Année">
@@ -159,6 +234,12 @@ export default function Operations() {
               ]}
               placeholder="Tous"
             />
+          </Field>
+          <Field label="Étiquette">
+            <NativeSelect testid="ops-tag-select" value={tag} onChange={setTag} options={[...new Set([...(data.tags ?? []), ...data.transactions.flatMap((t) => t.tags ?? [])])].sort().map((t) => ({ value: t, label: `#${t}` }))} placeholder="Toutes" />
+          </Field>
+          <Field label="Nature">
+            <NativeSelect testid="ops-kind-select" value={kind} onChange={setKind} options={[{ value: "recurring", label: "Dépenses récurrentes" }, { value: "oneoff", label: "Dépenses ponctuelles" }]} placeholder="Toutes" />
           </Field>
           <Field label="Montant min.">
             <Input data-testid="ops-min-input" inputMode="decimal" value={min} onChange={(e) => setMin(e.target.value)} placeholder="0" className={inputCls} />
@@ -219,6 +300,25 @@ export default function Operations() {
                       <button className="block max-w-full truncate text-left font-medium text-slate-800 hover:underline" onClick={() => openTxDialog(t)} data-testid="operation-description">
                         {t.description}
                       </button>
+                      {((t.tags?.length ?? 0) > 0 || (t.attachments?.length ?? 0) > 0 || isRecurringTx(data, t)) && (
+                        <span className="mt-1 flex flex-wrap items-center gap-1">
+                          {isRecurringTx(data, t) && (
+                            <span data-testid="operation-recurring-chip" className="inline-flex items-center gap-0.5 rounded-full bg-cyan-50 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-800 ring-1 ring-cyan-200">
+                              <Repeat className="size-2.5" /> Récurrente
+                            </span>
+                          )}
+                          {(t.tags ?? []).map((x) => (
+                            <button key={x} data-testid="operation-tag" onClick={() => setTag(x)} className="rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800 ring-1 ring-violet-200">
+                              #{x}
+                            </button>
+                          ))}
+                          {(t.attachments?.length ?? 0) > 0 && (
+                            <span data-testid="operation-attachments" className="inline-flex items-center gap-0.5 text-[10px] text-slate-500">
+                              <Paperclip className="size-3" /> {t.attachments!.length}
+                            </span>
+                          )}
+                        </span>
+                      )}
                       {t.note && (
                         <span className="mt-0.5 flex items-center gap-1 truncate text-xs text-slate-400">
                           <StickyNote className="size-3" /> {t.note}
@@ -228,11 +328,39 @@ export default function Operations() {
                     <td className="whitespace-nowrap px-3 py-3 text-slate-600">
                       <span className="mr-1.5 inline-block size-2 rounded-full" style={{ background: data.accounts.find((a) => a.id === t.accountId)?.color }} />
                       {accName(t.accountId)}
+                      {t.internal && t.counterpartAccountId && (
+                        <span data-testid="operation-transfer-route" className="mt-0.5 block text-[11px] text-slate-400">
+                          {t.amount < 0 ? "→ " : "← "}
+                          {accName(t.counterpartAccountId)}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex flex-col items-start gap-1">
                         <span className="text-slate-700">{t.category}</span>
                         <CatStatusBadge status={t.catStatus} />
+                        {(() => {
+                          if (t.catStatus !== "to_review" && !["", "Non classé"].includes(t.category)) return null;
+                          const sug = suggestCategory(data, t);
+                          if (!sug) return null;
+                          const others = sug.similarIds.filter((id) => id !== t.id);
+                          return (
+                            <span className="flex flex-wrap items-center gap-1 text-[11px]" data-testid="operation-suggestion">
+                              <Sparkles className="size-3 text-violet-500" />
+                              <span className="text-slate-500">
+                                {sug.category} · {Math.round(sug.confidence * 100)} %{sug.confidence < LOW_CONFIDENCE ? " (faible)" : ""}
+                              </span>
+                              <button data-testid="operation-suggestion-apply" onClick={() => applySuggestion(t, sug.category, [])} className="font-semibold text-violet-700 hover:underline">
+                                Appliquer
+                              </button>
+                              {others.length > 0 && (
+                                <button data-testid="operation-suggestion-apply-all" onClick={() => applySuggestion(t, sug.category, others)} className="font-semibold text-violet-700 hover:underline">
+                                  + {others.length} similaire{others.length > 1 ? "s" : ""}
+                                </button>
+                              )}
+                            </span>
+                          );
+                        })()}
                       </div>
                     </td>
                     <td className="px-3 py-3">
@@ -291,7 +419,7 @@ export default function Operations() {
         description={toDelete ? `« ${toDelete.description} » du ${fmtDate(toDelete.date)} (${money(toDelete.amount, toDelete.currency, true)}) sera définitivement supprimée.` : ""}
         onConfirm={() => {
           if (toDelete) deleteTransaction(toDelete.id);
-          toast.success("Opération supprimée");
+          toastUndo("Opération supprimée");
         }}
       />
       <CsvImportDialog open={importOpen} onOpenChange={setImportOpen} />
