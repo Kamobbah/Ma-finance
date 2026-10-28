@@ -124,6 +124,7 @@ export interface Budget {
 
 export interface AppData {
   version: 1;
+  seedVersion?: number;
   budgets: Budget[];
   dismissedSubscriptions: string[];
   accounts: Account[];

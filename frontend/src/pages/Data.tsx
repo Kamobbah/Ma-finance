@@ -268,8 +268,8 @@ export default function DataPage() {
             <Button variant="outline" data-testid="reset-seed-button" className="h-auto w-full justify-start gap-3 rounded-2xl p-4 text-left" onClick={() => setConfirmReset("seed")}>
               <RotateCcw className="size-5 text-amber-600" />
               <span>
-                <span className="block font-semibold">Revenir au relevé initial 2026</span>
-                <span className="block text-xs font-normal text-slate-500 whitespace-normal">Efface vos ajouts et réimporte le relevé Revolut de départ.</span>
+                <span className="block font-semibold">Revenir au relevé Revolut complet</span>
+                <span className="block text-xs font-normal text-slate-500 whitespace-normal">Efface vos ajouts et réimporte le relevé Revolut complet (depuis 2019).</span>
               </span>
             </Button>
             <Button variant="outline" data-testid="reset-empty-button" className="h-auto w-full justify-start gap-3 rounded-2xl border-rose-200 p-4 text-left hover:bg-rose-50" onClick={() => setConfirmReset("empty")}>

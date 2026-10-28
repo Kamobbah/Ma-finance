@@ -6,9 +6,12 @@ Le backend FastAPI du template reste en place mais n'est PAS utilisé par l'app 
 ## Stockage
 - IndexedDB `ma-finance` / store `kv` / clé `data` → objet `AppData` complet (src/lib/store.ts), sauvegarde auto (debounce 250 ms) après chaque modification. Fallback localStorage `ma-finance-data`.
 - Préférences (filtre compte, année, interrupteur virements internes) : localStorage `ma-finance-prefs`.
-- Premier lancement : `src/data/releve-2026.csv` (relevé Revolut) est parsé (src/lib/revolut.ts) puis catégorisé par les règles par défaut.
+- Premier lancement : `src/data/releve-revolut.csv` (relevé Revolut COMPLET depuis l'ouverture, nov. 2019 → oct. 2026, SEED_VERSION=2) est parsé (src/lib/revolut.ts) puis catégorisé par les règles par défaut.
 
 ## Données initiales (seed)
+- v2 : ~2 330 opérations 2019-2026, 14 comptes (Pockets fermées Amis, Voiture, Voyages, Test, IMP: Économies → archivées), compte USD avec 12 opérations (conversions « Change en … » = internes côté USD ; côté compte principal = revenu/dépense catégorie « Change de devises »). Comptes ouverts à 0 €.
+- Migration : une base existante avec seedVersion < 2 est fusionnée au démarrage (mergeWithNewSeed) : l'historique importé est remplacé, les saisies manuelles/récurrentes, corrections de catégorie, règles, budgets, objectifs, récurrences et réglages de comptes sont conservés (doublons manuels déjà présents dans le relevé supprimés).
+- (historique v1 ci-dessous)
 - Comptes : Compte principal (acc-main, ouverture 54,85 €), Compte USD, Compte JPY (vides), Pockets : IMP: Économies, IMP: Achats, IMP: Voiture, Madré, Personnels, IMP: Prélèvements (pocket-<slug>), Compte d'épargne (acc-savings).
 - Soldes au 28/10/2026 : Madré 809,56 €, Personnels 30,04 €, épargne 0,38 €, autres 0 → consolidé 839,98 €.
 - ~1199 opérations 2026. Virements Pocket/épargne = internes (transfer_in/out). Côté épargne : opérations miroirs + intérêts + 1 « Ajustement de rapprochement » pour retrouver le solde de clôture (le relevé ne détaille que les intérêts).

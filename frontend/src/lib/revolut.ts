@@ -81,6 +81,7 @@ export function parseRevolutStatement(text: string, existing: Account[] = []): B
   let savingsClosing: number | null = null;
   let savingsOpenDate: string | null = null;
   let recapAccount: Account | null = null;
+  const closed = new Set<string>();
 
   rows.forEach((r, idx) => {
     const c0 = (r[0] ?? "").trim();
@@ -94,6 +95,7 @@ export function parseRevolutStatement(text: string, existing: Account[] = []): B
       return;
     }
     if (phase === "recap") {
+      if (recapAccount && r[2] === "Date de fermeture" && (r[3] ?? "").trim()) closed.add(recapAccount.id);
       if (recapAccount?.type === "savings") {
         if (r[2] === "Solde de clôture") savingsClosing = parseAmount(r[3]);
         if (r[2] === "Date d'ouverture") savingsOpenDate = parseDate(r[3]);
@@ -104,8 +106,10 @@ export function parseRevolutStatement(text: string, existing: Account[] = []): B
     if (!date || !current) return;
     if (phase === "tx") {
       const amount = parseAmount(r[3]);
-      if (amount === null || current.currency !== "EUR") return;
-      raws.push({ accountId: current.id, date, description: decodeHtml(r[1]).trim(), amount, balance: parseAmount(r[4]), idx });
+      if (amount === null) return;
+      // comptes en devises : colonnes doublées (devise, EUR) → solde en colonne 5
+      const balance = parseAmount(current.currency === "EUR" ? r[4] : r[5]);
+      raws.push({ accountId: current.id, date, description: decodeHtml(r[1]).trim(), amount, balance, idx });
     } else {
       const net = parseAmount(r[7]);
       if (net === null || net === 0) return;
@@ -121,6 +125,10 @@ export function parseRevolutStatement(text: string, existing: Account[] = []): B
     const acc = accounts.get(raw.accountId)!;
     if (!existing.some((e) => e.id === acc.id) && raw.balance !== null) acc.openingBalance = round2(raw.balance - raw.amount);
   }
+  for (const id of closed) {
+    const acc = accounts.get(id);
+    if (acc && !existing.some((e) => e.id === id) && acc.type === "pocket") acc.archived = true;
+  }
 
   const baseTime = Date.now();
   const txs: Transaction[] = [];
@@ -132,7 +140,7 @@ export function parseRevolutStatement(text: string, existing: Account[] = []): B
     category: internal ? INTERNAL_CATEGORY : "",
     type,
     amount: raw.amount,
-    currency: "EUR",
+    currency: accounts.get(raw.accountId)?.currency ?? "EUR",
     internal,
     counterpartAccountId: counterpart,
     source: "import",
@@ -162,6 +170,9 @@ export function parseRevolutStatement(text: string, existing: Account[] = []): B
         counterpart = match?.accountId;
       }
       txs.push(mk(raw, dirType(raw.amount), true, counterpart));
+    } else if (acc.currency !== "EUR" && /^Change en /i.test(d)) {
+      // conversion de devises côté compte en devise : mouvement interne avec le compte principal
+      txs.push(mk(raw, dirType(raw.amount), true, MAIN_ID));
     } else if (/compte d'épargne/i.test(d)) {
       txs.push(mk(raw, dirType(raw.amount), true, savingsAcc.id));
       const mirror: Raw = { ...raw, accountId: savingsAcc.id, amount: -raw.amount, description: raw.amount < 0 ? `Depuis ${acc.name}` : `Vers ${acc.name}` };

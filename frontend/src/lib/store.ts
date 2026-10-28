@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import seedCsv from "@/data/releve-2026.csv?raw";
+import seedCsv from "@/data/releve-revolut.csv?raw";
 import type { Account, AppData, Budget, Category, Goal, Prefs, Recurrence, Rule, Transaction } from "./types";
 import { applyRules, DEFAULT_CATEGORIES, defaultRules } from "./rules";
 import { parseRevolutStatement } from "./revolut";
@@ -132,14 +132,54 @@ function detectRecurrences(txs: Transaction[]): Recurrence[] {
   return out;
 }
 
+/** v2 : relevé complet depuis l'ouverture du compte (2019 →). */
+export const SEED_VERSION = 2;
+
+const dupKey = (t: Transaction) => `${t.date}|${t.accountId}|${t.amount.toFixed(2)}|${t.description.toLowerCase().replace(/\s+/g, " ").trim()}`;
+
+/** Remplace l'historique importé par le nouveau relevé en conservant tout ce que l'utilisateur a créé ou corrigé. */
+function mergeWithNewSeed(old: AppData): AppData {
+  const { accounts: seedAccounts, transactions } = parseRevolutStatement(seedCsv);
+  const missingRules = defaultRules().filter((r) => !old.rules.some((o) => o.name === r.name));
+  const rules = [...old.rules, ...missingRules];
+  const categories = [...old.categories, ...DEFAULT_CATEGORIES.filter((c) => !old.categories.some((o) => o.name === c.name))];
+  const accounts: Account[] = seedAccounts.map((a) => {
+    const prev = old.accounts.find((o) => o.id === a.id);
+    return prev ? { ...a, name: prev.name, color: prev.color, icon: prev.icon, goal: prev.goal, archived: a.archived || prev.archived } : a;
+  });
+  for (const o of old.accounts) if (!accounts.some((a) => a.id === o.id)) accounts.push(o);
+
+  const corrections = new Map<string, Transaction>();
+  for (const t of old.transactions) if (t.source === "import" && t.catStatus === "manual") corrections.set(dupKey(t), t);
+  const imported = transactions.map((t) => {
+    const fix = corrections.get(dupKey(t));
+    return fix ? { ...t, category: fix.category, type: fix.type, internal: fix.internal, note: fix.note, catStatus: "manual" as const } : applyRules(t, rules);
+  });
+  const seen = new Map<string, number>();
+  for (const t of imported) seen.set(dupKey(t), (seen.get(dupKey(t)) ?? 0) + 1);
+  const kept = old.transactions.filter((t) => {
+    if (t.source === "import") return false;
+    const k = dupKey(t);
+    const n = seen.get(k) ?? 0;
+    if (n > 0) {
+      seen.set(k, n - 1);
+      return false; // saisie manuelle désormais présente dans le relevé
+    }
+    return true;
+  });
+  return { ...old, seedVersion: SEED_VERSION, accounts, rules, categories, transactions: [...imported, ...kept] };
+}
+
 export function buildSeed(): AppData {
   const { accounts, transactions } = parseRevolutStatement(seedCsv);
   const rules = defaultRules();
   const txs = transactions.map((t) => applyRules(t, rules));
-  return { version: 1, budgets: [], dismissedSubscriptions: [], accounts, transactions: txs, categories: DEFAULT_CATEGORIES, rules, recurrences: detectRecurrences(txs), goals: [] };
+  return { version: 1, seedVersion: SEED_VERSION, budgets: [], dismissedSubscriptions: [], accounts, transactions: txs, categories: DEFAULT_CATEGORIES, rules, recurrences: detectRecurrences(txs), goals: [] };
 }
 
 let createdOnBoot = 0;
+let seedMigrated = false;
+export const bootSeedMigrated = () => seedMigrated;
 export const bootCreatedCount = () => createdOnBoot;
 
 function runRecurrences(d: AppData): { data: AppData; created: number } {
@@ -163,14 +203,20 @@ export async function initStore() {
     data = raw ? (JSON.parse(raw) as AppData) : undefined;
   }
   const first = !data;
+  let migrated = false;
   if (!data) data = buildSeed();
+  else if ((data.seedVersion ?? 1) < SEED_VERSION) {
+    data = mergeWithNewSeed(data);
+    migrated = true;
+  }
   data = { ...EMPTY, ...data, budgets: data.budgets ?? [], dismissedSubscriptions: data.dismissedSubscriptions ?? [] };
   const res = runRecurrences(data);
   createdOnBoot = res.created;
+  seedMigrated = migrated;
   state = res.data;
   ready = true;
   emit();
-  if (first || res.created || res.data !== data) persist();
+  if (first || migrated || res.created || res.data !== data) persist();
 }
 
 /* ---------------- Actions ---------------- */

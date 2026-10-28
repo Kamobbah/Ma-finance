@@ -13,7 +13,7 @@ import DataPage from "@/pages/Data";
 import Budgets from "@/pages/Budgets";
 import Accounts from "@/pages/Accounts";
 import AccountDetail from "@/pages/AccountDetail";
-import { bootCreatedCount, initStore, useReady } from "@/lib/store";
+import { bootCreatedCount, bootSeedMigrated, initStore, useReady } from "@/lib/store";
 
 let booted = false;
 
@@ -24,6 +24,8 @@ export default function App() {
     if (booted) return;
     booted = true;
     initStore().then(() => {
+      if (bootSeedMigrated())
+        setTimeout(() => toast.success("Historique mis à jour", { description: "Le relevé complet depuis l'ouverture du compte a été chargé. Vos saisies, règles, budgets et objectifs sont conservés.", duration: 8000 }), 300);
       const n = bootCreatedCount();
       if (n) setTimeout(() => toast.success(`${n} opération(s) récurrente(s) créée(s) automatiquement`), 400);
     });
