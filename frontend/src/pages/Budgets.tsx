@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { AlertTriangle, CalendarRange, Landmark, Forward, ChevronLeft, ChevronRight, MoreHorizontal, Pencil, Plus, SlidersHorizontal, Target, Trash2 } from "lucide-react";
+import { AlertTriangle, CalendarRange, CopyPlus, Landmark, Forward, ChevronLeft, ChevronRight, MoreHorizontal, Pencil, Plus, SlidersHorizontal, Target, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
@@ -177,6 +177,83 @@ function LimitDialog({ target, onClose }: { target: { budget: Budget; mode: "def
   );
 }
 
+function CopyNextDialog({ open, onClose, mk, onDone }: { open: boolean; onClose: () => void; mk: string; onDone: (next: string) => void }) {
+  const data = useData();
+  const next = shiftMonth(mk, 1);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (open) setPicked(new Set(data.budgets.map((b) => b.id)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  const rows = data.budgets.map((b) => ({ b, cur: budgetLimit(b, mk), nxt: budgetLimit(b, next), adjusted: next in b.overrides }));
+  const changes = rows.filter((r) => picked.has(r.b.id) && r.cur !== r.nxt).length;
+  const submit = () => {
+    const sel = rows.filter((r) => picked.has(r.b.id));
+    if (!sel.length) return toast.error("Sélectionnez au moins un budget");
+    for (const r of sel) {
+      const overrides = { ...r.b.overrides };
+      if (r.cur === r.b.amount) delete overrides[next];
+      else overrides[next] = r.cur;
+      saveBudget({ ...r.b, overrides });
+    }
+    toast.success(`Plafonds de ${mkLabel(next).toLowerCase()} préparés`, { description: `${sel.length} budget${sel.length > 1 ? "s" : ""} copié${sel.length > 1 ? "s" : ""} depuis ${mkLabel(mk).toLowerCase()} · le report éventuel s'ajoutera automatiquement` });
+    onClose();
+    onDone(next);
+  };
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent data-testid="copy-next-dialog" className="max-h-[92vh] overflow-y-auto rounded-3xl p-6 sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="text-xl font-bold">Préparer {mkLabel(next).toLowerCase()}</DialogTitle>
+          <DialogDescription>Les plafonds de {mkLabel(mk).toLowerCase()} sont copiés sur le mois suivant. Le report du reste non dépensé reste calculé automatiquement en plus.</DialogDescription>
+        </DialogHeader>
+        <ul className="space-y-1.5">
+          {rows.map((r) => (
+            <li key={r.b.id}>
+              <label data-testid="copy-next-row" className="flex cursor-pointer items-center gap-3 rounded-2xl bg-slate-50 px-3 py-2.5 text-sm transition-colors hover:bg-slate-100">
+                <Checkbox
+                  data-testid={`copy-next-check-${r.b.id}`}
+                  checked={picked.has(r.b.id)}
+                  onCheckedChange={(c) =>
+                    setPicked((p) => {
+                      const n = new Set(p);
+                      if (c) n.add(r.b.id);
+                      else n.delete(r.b.id);
+                      return n;
+                    })
+                  }
+                />
+                <span className="min-w-0 flex-1 truncate font-medium text-slate-800">{budgetLabel(data, r.b)}</span>
+                <span className="shrink-0 text-xs tabular text-slate-500">
+                  {r.cur === r.nxt ? (
+                    <>{money(r.cur)} · inchangé</>
+                  ) : (
+                    <>
+                      <span className="line-through">{money(r.nxt)}</span>
+                      {r.adjusted && " (ajusté)"} → <b className="text-slate-900">{money(r.cur)}</b>
+                    </>
+                  )}
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+        <p className="text-xs text-slate-500" data-testid="copy-next-summary">
+          {picked.size} budget{picked.size > 1 ? "s" : ""} sélectionné{picked.size > 1 ? "s" : ""} · {changes} plafond{changes > 1 ? "s" : ""} modifié{changes > 1 ? "s" : ""}
+        </p>
+        <DialogFooter className="-mx-6 -mb-6 rounded-b-3xl px-6">
+          <Button variant="outline" onClick={onClose}>
+            Annuler
+          </Button>
+          <Button data-testid="copy-next-confirm" disabled={!picked.size} onClick={submit}>
+            Copier vers {mkLabel(next).toLowerCase()}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Budgets() {
   const data = useData();
   const currentMk = todayIso().slice(0, 7);
@@ -184,6 +261,7 @@ export default function Budgets() {
   const [params, setParams] = useSearchParams();
   const presetAccount = params.get("compte") ?? undefined;
   const [newOpen, setNewOpen] = useState(!!presetAccount);
+  const [copyOpen, setCopyOpen] = useState(false);
   const [filter, setFilter] = useState<"all" | "category" | "account">("all");
   const [limitTarget, setLimitTarget] = useState<{ budget: Budget; mode: "default" | "month"; mk: string } | null>(null);
   const [toDelete, setToDelete] = useState<Budget | null>(null);
@@ -207,9 +285,14 @@ export default function Budgets() {
         title="Budgets"
         subtitle="Un plafond mensuel par catégorie ou par compte, ajustable mois par mois, avec report automatique du reste non dépensé. Alerte orange à 80 %, rouge au dépassement. Les virements internes ne sont jamais comptés."
         actions={
-          <Button data-testid="new-budget-button" className="h-10 rounded-xl" onClick={() => setNewOpen(true)}>
-            <Plus /> Nouveau budget
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" data-testid="copy-next-button" className="h-10 rounded-xl" disabled={!data.budgets.length} onClick={() => setCopyOpen(true)}>
+              <CopyPlus /> Préparer {MONTHS_LONG[Number(shiftMonth(mk, 1).slice(5)) - 1].toLowerCase()}
+            </Button>
+            <Button data-testid="new-budget-button" className="h-10 rounded-xl" onClick={() => setNewOpen(true)}>
+              <Plus /> Nouveau budget
+            </Button>
+          </div>
         }
       />
 
@@ -399,6 +482,7 @@ export default function Budgets() {
       )}
 
       <NewBudgetDialog open={newOpen} onClose={closeNew} mk={mk} presetAccount={presetAccount} />
+      <CopyNextDialog open={copyOpen} onClose={() => setCopyOpen(false)} mk={mk} onDone={setMk} />
       <LimitDialog target={limitTarget} onClose={() => setLimitTarget(null)} />
       <ConfirmDialog
         open={!!toDelete}
