@@ -93,7 +93,9 @@ export interface Recurrence {
   cumulated: number;
 }
 
-export type GoalStatus = "active" | "reached" | "paused" | "abandoned";
+export type GoalStatus = "active" | "reached" | "paused" | "abandoned" | "archived";
+export type GoalKind = "target" | "open" | "monthly";
+export type GoalPriority = "essential" | "important" | "bonus";
 
 export interface GoalMove {
   date: string;
@@ -109,6 +111,10 @@ export interface Goal {
   color: string;
   icon: string;
   status: GoalStatus;
+  kind?: GoalKind; // défaut "target" (objectifs existants)
+  monthly?: number; // versement mensuel prévu (€)
+  priority?: GoalPriority; // défaut "important"
+  reachedAck?: boolean; // objectif atteint : l'utilisateur a choisi de conserver les fonds
   history: GoalMove[];
   createdAt: string;
 }

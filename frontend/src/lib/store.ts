@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import seedCsv from "@/data/releve-revolut.csv?raw";
+import { syncGoalStatus } from "./goals";
 import type { Account, AppData, Budget, Category, Goal, Prefs, Recurrence, Rule, Transaction } from "./types";
 import { applyRules, DEFAULT_CATEGORIES, defaultRules } from "./rules";
 import { parseRevolutStatement } from "./revolut";
@@ -301,6 +302,13 @@ export function deleteRecurrence(id: string) {
 export function saveGoal(goal: Goal) {
   update((d) => ({ ...d, goals: d.goals.some((g) => g.id === goal.id) ? d.goals.map((g) => (g.id === goal.id ? goal : g)) : [...d.goals, goal] }));
 }
+/** Enregistre plusieurs objectifs en une seule mise à jour (ex. transfert de fonds d'un objectif atteint). */
+export function saveGoals(goals: Goal[]) {
+  update((d) => {
+    const ids = new Set(goals.map((g) => g.id));
+    return { ...d, goals: [...d.goals.map((g) => goals.find((x) => x.id === g.id) ?? g), ...goals.filter((g) => !d.goals.some((x) => x.id === g.id) && ids.has(g.id))] };
+  });
+}
 export function deleteGoal(id: string) {
   update((d) => ({ ...d, goals: d.goals.filter((g) => g.id !== id) }));
 }
@@ -314,10 +322,7 @@ export function allocate(amounts: Record<string, number>) {
       if (!a) return g;
       const allocated = round2(Math.max(0, g.allocated + a));
       const delta = round2(allocated - g.allocated);
-      let status = g.status;
-      if (allocated >= g.target && g.status === "active") status = "reached";
-      if (allocated < g.target && g.status === "reached") status = "active";
-      return { ...g, allocated, status, history: [...g.history, { date, amount: delta }] };
+      return syncGoalStatus({ ...g, allocated, history: [...g.history, { date, amount: delta }] });
     }),
   }));
 }

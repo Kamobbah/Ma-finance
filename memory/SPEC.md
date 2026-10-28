@@ -51,3 +51,13 @@ Account, Transaction (montant signé, type income|expense|transfer_in|transfer_o
 
 ## Auth
 Aucune.
+
+## Fonctionnalités v4
+- Épargne (src/lib/goals.ts, pages/Savings.tsx) : `Goal.kind` target|open|monthly (défaut target pour les anciens objectifs), `monthly?` (mensuel prévu), `priority?` essential|important|bonus (défaut important), statut `archived`, `reachedAck`. Validation : cible > 0 pour un objectif cible, mensuel > 0 pour un objectif mensuel, pas de montant négatif, allocation ≤ non alloué (désallocation ≤ alloué).
+  - Calculs : mensuel requis = restant / mois jusqu'à la date cible ; projeté fin d'année = alloué + mensuel prévu × mois restants (mois en cours compté s'il n'a pas reçu de versement ; plafonné à la cible et à la date de fin) ; atteinte estimée = restant / mensuel prévu (sinon rythme réel 90 j). Alerte « À ce rythme, la date cible ne sera pas atteinte » si requis > prévu.
+  - KPI : solde réel, alloué, non alloué, épargne mensuelle prévue (objectifs actifs), solde projeté fin d'année (réel + versements prévus + intérêts estimés = moyenne 3 mois × mois restants), état de la répartition (Équilibré / Sur-allocation de X €, non bloquant).
+  - Répartir un versement : Suggérer (essentiels → date proche → en retard → importants → ouverts/bonus, chacun au plus son besoin du mois), Selon le besoin mensuel (prorata requis ou prévu), parts égales, prorata du restant, saisie manuelle ; le reste demeure non alloué.
+  - Objectif atteint : badge 🎯 Atteint + actions Conserver / Archiver (fonds restent alloués) / Libérer les fonds (alloué → 0, archivé) / Renouveler (nouvelle cible ou date) / Nouvel objectif avec ces fonds (transfert, ancien archivé). Section « Archivés » repliable. Fenêtre détail (clic sur le nom) avec toutes les valeurs + historique.
+  - Icônes/couleurs : préréglages + bouton « Personnaliser » (emoji libre, sélecteur de couleur).
+- Bilan annuel (/bilan, src/lib/years.ts, pages/Years.tsx) : chaque année depuis la 1re opération (tous comptes EUR, hors internes) : revenus, dépenses, net, taux d'épargne, variation du compte d'épargne, tendances (évolution vs N-1 — en moyenne mensuelle si une année est incomplète —, premier poste, plus forte hausse/baisse de catégorie, meilleur/pire mois), mini-barres mensuelles. Graphique « Comparaison des années » superposant mois par mois (2024, 2025, 2026 par défaut ; années activables), métriques dépenses/revenus/net/net cumulé. Vue d'ensemble en barres.
+- Rappel de solde bas (`lowBalanceAlerts` dans insights.ts, bandeau rose dans RemindersBar + toast) : Pockets non archivées dont le solde actuel ne couvre pas les dépenses récurrentes actives des 7 prochains jours ; affiche le manque et la date ; masquable (clé dans prefs.dismissedReminders).

@@ -48,6 +48,49 @@ export function reminderLabel(r: Reminder) {
   return `Dans ${r.daysUntil} jours`;
 }
 
+/* ---------------- Solde bas d'une Pocket ---------------- */
+export interface LowBalanceAlert {
+  key: string;
+  accountId: string;
+  accountName: string;
+  balance: number;
+  due: number; // total des échéances à venir sur la fenêtre
+  shortfall: number; // montant manquant au pire moment
+  firstShortDate: string; // première échéance qui ne passe pas
+  items: { name: string; date: string; amount: number }[];
+}
+
+export const LOW_BALANCE_DAYS = 7;
+
+/** Pockets dont le solde actuel ne couvre pas les prélèvements récurrents des 7 prochains jours. */
+export function lowBalanceAlerts(data: AppData, today = todayIso(), days = LOW_BALANCE_DAYS): LowBalanceAlert[] {
+  const end = new Date(fromIso(today));
+  end.setDate(end.getDate() + days);
+  const endIso = toIso(end);
+  const out: LowBalanceAlert[] = [];
+  for (const acc of data.accounts) {
+    if (acc.type !== "pocket" || acc.archived) continue;
+    const items = data.recurrences
+      .filter((r) => r.type === "expense" && r.accountId === acc.id)
+      .flatMap((r) => forecast(r, today, endIso, 10).map((o) => ({ name: r.name, date: o.date, amount: -o.amount })))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (!items.length) continue;
+    const balance = accountBalance(acc, data.transactions, today);
+    let run = balance;
+    let worst = 0;
+    let firstShortDate = "";
+    for (const it of items) {
+      run = round2(run - it.amount);
+      if (run < 0 && !firstShortDate) firstShortDate = it.date;
+      worst = Math.min(worst, run);
+    }
+    if (!firstShortDate) continue;
+    const shortfall = round2(-worst);
+    out.push({ key: `low|${acc.id}|${firstShortDate}|${shortfall}`, accountId: acc.id, accountName: acc.name, balance, due: round2(items.reduce((s, i) => s + i.amount, 0)), shortfall, firstShortDate, items });
+  }
+  return out.sort((a, b) => a.firstShortDate.localeCompare(b.firstShortDate));
+}
+
 /* ---------------- Bilan du mois ---------------- */
 export interface PocketRecap {
   acc: Account;

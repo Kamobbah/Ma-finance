@@ -1,6 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useState } from "react";
-import { LayoutDashboard, ListOrdered, LineChart, PiggyBank, Repeat, Wand2, Database, Plus, Menu, ShieldCheck, Target, WalletCards } from "lucide-react";
+import { LayoutDashboard, ListOrdered, LineChart, PiggyBank, Repeat, Wand2, Database, Plus, Menu, ShieldCheck, Target, WalletCards, CalendarRange } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -17,6 +17,7 @@ export const NAV = [
   { to: "/operations", label: "Opérations", icon: ListOrdered, id: "operations" },
   { to: "/comptes", label: "Comptes & Pockets", icon: WalletCards, id: "comptes" },
   { to: "/analyse", label: "Analyse annuelle", icon: LineChart, id: "analyse" },
+  { to: "/bilan", label: "Bilan annuel", icon: CalendarRange, id: "bilan" },
   { to: "/budgets", label: "Budgets", icon: Target, id: "budgets" },
   { to: "/epargne", label: "Épargne", icon: PiggyBank, id: "epargne" },
   { to: "/recurrences", label: "Récurrences", icon: Repeat, id: "recurrences" },

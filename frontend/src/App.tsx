@@ -6,6 +6,7 @@ import AppShell from "@/components/AppShell";
 import Dashboard from "@/pages/Dashboard";
 import Operations from "@/pages/Operations";
 import Annual from "@/pages/Annual";
+import Years from "@/pages/Years";
 import Savings from "@/pages/Savings";
 import Recurrences from "@/pages/Recurrences";
 import Rules from "@/pages/Rules";
@@ -51,6 +52,7 @@ export default function App() {
         <Route path="/comptes" element={<Accounts />} />
         <Route path="/comptes/:id" element={<AccountDetail />} />
         <Route path="/analyse" element={<Annual />} />
+        <Route path="/bilan" element={<Years />} />
         <Route path="/budgets" element={<Budgets />} />
         <Route path="/epargne" element={<Savings />} />
         <Route path="/recurrences" element={<Recurrences />} />
