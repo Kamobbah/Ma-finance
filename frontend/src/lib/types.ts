@@ -113,6 +113,7 @@ export interface Goal {
   status: GoalStatus;
   kind?: GoalKind; // défaut "target" (objectifs existants)
   monthly?: number; // versement mensuel prévu (€)
+  minimum?: number; // montant minimum souhaité (objectifs sans cible)
   priority?: GoalPriority; // défaut "important"
   reachedAck?: boolean; // objectif atteint : l'utilisateur a choisi de conserver les fonds
   history: GoalMove[];

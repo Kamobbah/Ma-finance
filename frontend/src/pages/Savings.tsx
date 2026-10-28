@@ -38,6 +38,7 @@ function GoalDialog({ mode, onClose, unallocated }: { mode: DialogMode | null; o
   const [kind, setKind] = useState<GoalKind>("target");
   const [target, setTarget] = useState("");
   const [monthly, setMonthly] = useState("");
+  const [minimum, setMinimum] = useState("");
   const [initial, setInitial] = useState("");
   const [targetDate, setTargetDate] = useState("");
   const [color, setColor] = useState(COLORS[0]);
@@ -52,6 +53,7 @@ function GoalDialog({ mode, onClose, unallocated }: { mode: DialogMode | null; o
     setKind(goal ? kindOf(goal) : "target");
     setTarget(goal && hasTarget(goal) && !renew ? fr(goal.target) : "");
     setMonthly(goal?.monthly ? fr(goal.monthly) : "");
+    setMinimum(goal?.minimum ? fr(goal.minimum) : "");
     setInitial(source ? fr(source.allocated) : "");
     setTargetDate(renew ? "" : (goal?.targetDate ?? ""));
     const c = goal?.color ?? COLORS[Math.floor(Math.random() * COLORS.length)];
@@ -68,14 +70,16 @@ function GoalDialog({ mode, onClose, unallocated }: { mode: DialogMode | null; o
     const t = parseAmount(target);
     const m = parseAmount(monthly);
     const init = parseAmount(initial) ?? 0;
+    const mn = parseAmount(minimum);
     if (!name.trim()) return toast.error("Donnez un nom à l'objectif");
     if (kind === "target" && (!t || t <= 0)) return toast.error("Un objectif cible demande un montant cible supérieur à 0 €");
     if (kind === "monthly" && (!m || m <= 0)) return toast.error("Un objectif mensuel demande un versement mensuel supérieur à 0 €");
     if (m !== null && m < 0) return toast.error("Le versement mensuel ne peut pas être négatif");
+    if (mn !== null && mn < 0) return toast.error("Le minimum souhaité ne peut pas être négatif");
     if (init < 0) return toast.error("Le montant alloué ne peut pas être négatif");
     if (!goal && init > Math.max(0, available) + EPS) return toast.error(`Vous ne pouvez allouer que ${money(Math.max(0, available))} au maximum`);
     if (!icon.trim()) return toast.error("Choisissez une icône");
-    const base = { name: name.trim(), kind, target: kind === "target" ? round2(t ?? 0) : 0, monthly: m && m > 0 ? round2(m) : undefined, targetDate: kind === "open" ? undefined : targetDate || undefined, color, icon: icon.trim(), priority };
+    const base = { name: name.trim(), kind, target: kind === "target" ? round2(t ?? 0) : 0, monthly: m && m > 0 ? round2(m) : undefined, minimum: kind !== "target" && mn && mn > 0 ? round2(mn) : undefined, targetDate: kind === "open" ? undefined : targetDate || undefined, color, icon: icon.trim(), priority };
     const today = todayIso();
     if (goal) {
       const next = syncGoalStatus({ ...goal, ...base, status: mode?.kind === "renew" ? "active" : status, reachedAck: mode?.kind === "renew" ? false : goal.reachedAck });
@@ -141,6 +145,11 @@ function GoalDialog({ mode, onClose, unallocated }: { mode: DialogMode | null; o
           <Field label={kind === "monthly" ? "Mensuel prévu (€)" : "Mensuel prévu (€, facultatif)"} className={kind === "target" ? "" : "col-span-2 sm:col-span-1"}>
             <Input data-testid="goal-monthly-input" inputMode="decimal" value={monthly} onChange={(e) => setMonthly(e.target.value)} placeholder="100" className={inputCls} />
           </Field>
+          {kind !== "target" && (
+            <Field label="Minimum souhaité (€, facultatif)" className="col-span-2 sm:col-span-1" hint="Le seuil à garder au minimum sur cet objectif">
+              <Input data-testid="goal-minimum-input" inputMode="decimal" value={minimum} onChange={(e) => setMinimum(e.target.value)} placeholder="500" className={inputCls} />
+            </Field>
+          )}
           {kind !== "open" && (
             <Field label={kind === "monthly" ? "Date de fin (facultative)" : "Date cible (facultative)"} className={kind === "target" ? "col-span-2" : "col-span-2 sm:col-span-1"}>
               <Input data-testid="goal-date-input" type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} className={inputCls} />
@@ -379,6 +388,7 @@ function SplitDialog({ open, onClose, goals, unallocated }: { open: boolean; onC
                     <p className="mt-0.5 text-[11px] text-slate-500 tabular" data-testid="split-goal-meta">
                       Alloué {money(g.allocated)}
                       {s.target !== null && <> · Cible {money(s.target)} · Restant {money(s.remaining ?? 0)}</>}
+                      {s.minimum !== null && <> · Minimum {money(s.minimum)}{s.minMissing ? ` (manque ${money(s.minMissing)})` : " ✓"}</>}
                       {s.planned > 0 && <> · Mensuel prévu {money(s.planned)}</>}
                       {s.required !== null && <> · Mensuel requis {money(s.required)}</>}
                     </p>
@@ -490,6 +500,10 @@ function goalMetrics(g: Goal, s: GoalStats, prefix: string) {
     m.push({ label: "Cible", value: money(s.target), testid: `${prefix}-target` });
     m.push({ label: "Restant", value: money(s.remaining ?? 0), testid: `${prefix}-remaining` });
   }
+  if (s.minimum !== null) {
+    m.push({ label: "Minimum souhaité", value: money(s.minimum), testid: `${prefix}-minimum` });
+    m.push({ label: "Manque pour le minimum", value: s.minMissing ? money(s.minMissing) : "Atteint ✓", testid: `${prefix}-min-missing`, tone: s.minMissing ? "warn" : undefined });
+  }
   m.push({ label: "Mensuel prévu", value: s.planned ? `${money(s.planned)}/mois` : "—", testid: `${prefix}-planned` });
   if (s.target !== null) m.push({ label: "Mensuel requis", value: s.required !== null ? `${money(s.required)}/mois` : s.reached ? "Atteint" : "Pas de date cible", testid: `${prefix}-required`, tone: s.behind ? "warn" : undefined });
   if (s.projectedYear !== null) m.push({ label: "Projeté fin d'année", value: money(s.projectedYear), testid: `${prefix}-projected` });
@@ -527,6 +541,7 @@ function DetailDialog({ goal, onClose, handlers, onEdit }: { goal: Goal | null; 
             <p className="mt-1 text-xs font-semibold text-slate-600">{Math.round(s.progress * 100)} %</p>
           </div>
         )}
+        {s.minimum !== null && <MinimumBar g={goal} s={s} />}
         <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {goalMetrics(goal, s, "goal-detail").map((m) => (
             <Metric key={m.testid} {...m} />
@@ -560,6 +575,21 @@ function DetailDialog({ goal, onClose, handlers, onEdit }: { goal: Goal | null; 
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function MinimumBar({ g, s }: { g: Goal; s: GoalStats }) {
+  const min = s.minimum ?? 0;
+  const ok = !s.minMissing;
+  return (
+    <div className="mt-2" data-testid="goal-minimum">
+      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+        <div className={cn("h-full rounded-full transition-[width] duration-500", ok ? "bg-emerald-500" : "bg-amber-400")} style={{ width: `${Math.min(100, (g.allocated / min) * 100)}%` }} />
+      </div>
+      <p className={cn("mt-1 text-[11px] font-medium", ok ? "text-emerald-700" : "text-amber-800")} data-testid="goal-minimum-label">
+        {ok ? `Minimum souhaité atteint (${money(min)}) ✓` : `Minimum souhaité ${money(min)} · il manque ${money(s.minMissing ?? 0)}`}
+      </p>
+    </div>
   );
 }
 
@@ -659,6 +689,7 @@ function GoalCard({ g, onDetail, onEdit, onAlloc, onDelete, handlers }: { g: Goa
           </div>
         </div>
       )}
+      {s.minimum !== null && <MinimumBar g={g} s={s} />}
       <p data-testid="goal-status-line" className="mt-3 text-[13px] font-medium leading-snug text-slate-700">
         {goalStatusLine(g, s)}
       </p>

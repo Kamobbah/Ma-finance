@@ -64,6 +64,8 @@ export interface GoalStats {
   progress: number | null;
   reached: boolean;
   planned: number;
+  minimum: number | null; // minimum souhaité (objectifs sans cible)
+  minMissing: number | null; // ce qui manque pour l'atteindre
   required: number | null;
   behind: boolean;
   monthsYear: number;
@@ -78,6 +80,8 @@ export function goalStats(g: Goal, today = todayIso()): GoalStats {
   const remaining = target !== null ? round2(Math.max(0, target - g.allocated)) : null;
   const reached = isReached(g);
   const planned = plannedOf(g);
+  const minimum = target === null && g.minimum && g.minimum > 0 ? g.minimum : null;
+  const minMissing = minimum !== null ? round2(Math.max(0, minimum - g.allocated)) : null;
   let required: number | null = null;
   if (target !== null && g.targetDate && !reached && remaining) {
     const months = monthsBetween(today, g.targetDate);
@@ -102,7 +106,7 @@ export function goalStats(g: Goal, today = todayIso()): GoalStats {
     else if (planned > 0) eta = addMonths(today, Math.ceil(remaining / planned));
     else if (pace > 0) eta = addMonths(today, Math.ceil(remaining / pace));
   }
-  return { kind, target, remaining, progress: target ? g.allocated / target : null, reached, planned, required, behind, monthsYear, projectedYear, eta, pace };
+  return { kind, target, remaining, progress: target ? g.allocated / target : null, reached, planned, minimum, minMissing, required, behind, monthsYear, projectedYear, eta, pace };
 }
 
 /** Phrase de statut contextuelle affichée sur la carte. */
@@ -141,14 +145,14 @@ export function splitByNeed(goals: Goal[], total: number, today = todayIso()) {
 /**
  * Suggestion : on sert d'abord les objectifs essentiels, puis ceux dont la date cible approche,
  * puis ceux en retard sur le mensuel requis, puis les importants, enfin les objectifs ouverts / bonus.
- * Chaque objectif reçoit au plus son besoin du mois ; le reste éventuel reste non alloué.
+ * Chaque objectif reçoit au plus son besoin du mois (ou ce qui manque pour son minimum souhaité) ; le reste éventuel reste non alloué.
  */
 export function suggestAllocation(goals: Goal[], total: number, today = todayIso()) {
   const rows = goals.map((g) => ({ g, s: goalStats(g, today) }));
   const key = ({ g, s }: (typeof rows)[number]) => [
     priorityOf(g) === "essential" ? 0 : 1,
     g.targetDate && s.target !== null && !s.reached ? g.targetDate : "9999-12-31",
-    s.behind ? 0 : 1,
+    s.behind || (s.minMissing ?? 0) > 0 ? 0 : 1,
     priorityOf(g) === "important" ? 0 : 1,
     s.kind === "open" || priorityOf(g) === "bonus" ? 1 : 0,
   ];
@@ -163,7 +167,7 @@ export function suggestAllocation(goals: Goal[], total: number, today = todayIso
   const order: string[] = [];
   for (const { g, s } of rows) {
     if (s.reached) continue;
-    const need = Math.min(capOf(s), s.required ?? (s.planned || (s.remaining ?? 0)));
+    const need = Math.min(capOf(s), s.required ?? Math.max(s.planned, s.minMissing ?? 0, s.planned ? 0 : (s.remaining ?? 0)));
     const give = floor2(Math.min(left, need));
     if (give > 0) {
       out[g.id] = give;
